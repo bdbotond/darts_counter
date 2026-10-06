@@ -265,10 +265,32 @@ export class DartsMatch {
     return Math.min(v1, v2) + 1;
   }
 
-  resolveBullOff(winnerIndex) {
+  resolveBullOff(winnerIndex, decideEntireMatch = false) {
     if (this.isFinished) return false;
     this.currentLeg.winner = winnerIndex;
     this.currentLeg.decidedBy = "bull_off";
+
+    if (decideEntireMatch) {
+      if (winnerIndex === 0) {
+        this.legsP1 = Math.max(this.legsP1 + 1, this.legsToWin);
+        this.winner = this.player1;
+      } else {
+        this.legsP2 = Math.max(this.legsP2 + 1, this.legsToWin);
+        this.winner = this.player2;
+      }
+      this.isFinished = true;
+      this.legs.push(JSON.parse(JSON.stringify(this.currentLeg)));
+      this.history.push({
+        type: "bull_off",
+        legIndex: this.currentLegIndex,
+        turn: winnerIndex,
+        winner: winnerIndex,
+        legWon: true,
+        matchWon: true
+      });
+      return { success: true, isFinished: true, winner: this.winner };
+    }
+
     if (winnerIndex === 0) this.legsP1++;
     else this.legsP2++;
 
@@ -291,7 +313,10 @@ export class DartsMatch {
       this.isFinished = true;
       if (this.legsP1 > this.legsP2) this.winner = this.player1;
       else if (this.legsP2 > this.legsP1) this.winner = this.player2;
-      else this.winner = "Draw";
+      else {
+        // Bull-off resolves the tie
+        this.winner = winnerIndex === 0 ? this.player1 : this.player2;
+      }
       historyEntry.matchWon = true;
     } else {
       this.currentLegIndex++;

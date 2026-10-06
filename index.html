@@ -1108,6 +1108,8 @@
         <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
           <button class="btn btn-primary" id="btn-bo-award-p1">Award Leg to Player 1</button>
           <button class="btn btn-primary" id="btn-bo-award-p2">Award Leg to Player 2</button>
+          <button class="btn btn-gold" id="btn-bo-match-p1" style="display: none;">🏆 Award Match to Player 1</button>
+          <button class="btn btn-gold" id="btn-bo-match-p2" style="display: none;">🏆 Award Match to Player 2</button>
           <button class="btn btn-secondary" id="btn-bo-reset">Reset Throws</button>
         </div>
       </div>
@@ -1365,10 +1367,32 @@
         return Math.min(v1, v2) + 1;
       }
 
-      resolveBullOff(winnerIndex) {
+      resolveBullOff(winnerIndex, decideEntireMatch = false) {
         if (this.isFinished) return false;
         this.currentLeg.winner = winnerIndex;
         this.currentLeg.decidedBy = "bull_off";
+
+        if (decideEntireMatch) {
+          if (winnerIndex === 0) {
+            this.legsP1 = Math.max(this.legsP1 + 1, this.legsToWin);
+            this.winner = this.player1;
+          } else {
+            this.legsP2 = Math.max(this.legsP2 + 1, this.legsToWin);
+            this.winner = this.player2;
+          }
+          this.isFinished = true;
+          this.legs.push(JSON.parse(JSON.stringify(this.currentLeg)));
+          this.history.push({
+            type: "bull_off",
+            legIndex: this.currentLegIndex,
+            turn: winnerIndex,
+            winner: winnerIndex,
+            legWon: true,
+            matchWon: true
+          });
+          return { success: true, isFinished: true, winner: this.winner };
+        }
+
         if (winnerIndex === 0) this.legsP1++;
         else this.legsP2++;
 
@@ -1391,7 +1415,10 @@
           this.isFinished = true;
           if (this.legsP1 > this.legsP2) this.winner = this.player1;
           else if (this.legsP2 > this.legsP1) this.winner = this.player2;
-          else this.winner = "Draw";
+          else {
+            // Bull-off tiebreaker resolves winner
+            this.winner = winnerIndex === 0 ? this.player1 : this.player2;
+          }
           historyEntry.matchWon = true;
         } else {
           this.currentLegIndex++;
@@ -2704,8 +2731,34 @@
         document.getElementById("bo-rounds-count").textContent = activeMatch.bullOffAfterRounds;
         document.getElementById("bo-p1-name").textContent = activeMatch.player1;
         document.getElementById("bo-p2-name").textContent = activeMatch.player2;
-        document.getElementById("btn-bo-award-p1").textContent = `Award Leg to ${activeMatch.player1}`;
-        document.getElementById("btn-bo-award-p2").textContent = `Award Leg to ${activeMatch.player2}`;
+
+        const isDecidingLeg = (activeMatch.legsP1 + 1 >= activeMatch.legsToWin) ||
+                              (activeMatch.legsP2 + 1 >= activeMatch.legsToWin) ||
+                              (activeMatch.legsToWin === 1);
+
+        const btnP1 = document.getElementById("btn-bo-award-p1");
+        const btnP2 = document.getElementById("btn-bo-award-p2");
+        const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+        const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+
+        if (isDecidingLeg) {
+          btnP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
+          btnP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
+          if (btnMatchP1) btnMatchP1.style.display = "none";
+          if (btnMatchP2) btnMatchP2.style.display = "none";
+        } else {
+          btnP1.textContent = `Award Leg to ${activeMatch.player1}`;
+          btnP2.textContent = `Award Leg to ${activeMatch.player2}`;
+          if (btnMatchP1) {
+            btnMatchP1.style.display = "inline-flex";
+            btnMatchP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
+          }
+          if (btnMatchP2) {
+            btnMatchP2.style.display = "inline-flex";
+            btnMatchP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
+          }
+        }
+
         resetBullOffThrows();
         modal.style.display = "flex";
       }
@@ -2755,14 +2808,34 @@
         }
       }
 
-      document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0));
-      document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1));
+      document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0, false));
+      document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1, false));
+
+      const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+      if (btnMatchP1) btnMatchP1.addEventListener("click", () => resolveBullOffWinner(0, true));
+
+      const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+      if (btnMatchP2) btnMatchP2.addEventListener("click", () => resolveBullOffWinner(1, true));
+
       document.getElementById("btn-bo-reset").addEventListener("click", resetBullOffThrows);
 
-      function resolveBullOffWinner(winnerIndex) {
+      function resolveBullOffWinner(winnerIndex, decideEntireMatch = false) {
         if (!activeMatch) return;
         document.getElementById("modal-bull-off").style.display = "none";
-        activeMatch.resolveBullOff(winnerIndex);
+        activeMatch.resolveBullOff(winnerIndex, decideEntireMatch);
+
+        // Immediate tournament record if match finished
+        if (activeMatch.isFinished && currentTournamentMatch && activeTournament) {
+          activeTournament.recordMatchResult(currentTournamentMatch.id, {
+            winner: activeMatch.winner,
+            legsP1: activeMatch.legsP1,
+            legsP2: activeMatch.legsP2,
+            p1Stats: activeMatch.getPlayerStats(0),
+            p2Stats: activeMatch.getPlayerStats(1)
+          });
+          saveTournamentToStorage();
+        }
+
         renderScorer();
       }
 

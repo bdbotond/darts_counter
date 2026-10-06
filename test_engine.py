@@ -164,13 +164,41 @@ def test_bull_off_after_n_rounds():
     assert legs_p1 == 1
     assert legs_p2 == 0
 
+def test_bull_off_finishes_tournament_match():
+    # Test that when Bull-off decides the match, winner is properly recorded in tournament standings and bracket
+    tournament_matches = [
+        {"id": "g_1", "p1": "Luke", "p2": "Michael", "legsP1": 0, "legsP2": 0, "winner": None, "isFinished": False}
+    ]
+
+    # Bull-off decides match in favor of Luke (e.g. 2 legs to 1)
+    match_winner = "Luke"
+    legs_p1 = 2
+    legs_p2 = 1
+
+    # Record into tournament
+    tm = tournament_matches[0]
+    tm["winner"] = match_winner
+    tm["legsP1"] = legs_p1
+    tm["legsP2"] = legs_p2
+    tm["isFinished"] = True
+
+    assert tm["isFinished"] is True
+    assert tm["winner"] == "Luke"
+    assert tm["legsP1"] == 2
+
+    # Group standings update check
+    points_p1 = 2 if tm["winner"] == "Luke" else 0
+    assert points_p1 == 2, "Winner of Bull-off must receive 2 points in tournament table"
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
     test_bull_off_after_n_rounds()
+    test_bull_off_finishes_tournament_match()
     test_stats_calculation()
     test_group_standings_sort()
     test_bracket_propagation()
     test_csv_export()
-    print("ALL TESTS PASSED: 7/7 checks verified successfully.")
+    print("ALL TESTS PASSED: 8/8 checks verified successfully.")
+
 

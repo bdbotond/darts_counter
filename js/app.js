@@ -926,11 +926,38 @@ let boThrows = { p1: null, p2: null };
 function openBullOffModal() {
   if (!activeMatch) return;
   const modal = document.getElementById("modal-bull-off");
+  if (!modal) return;
   document.getElementById("bo-rounds-count").textContent = activeMatch.bullOffAfterRounds;
   document.getElementById("bo-p1-name").textContent = activeMatch.player1;
   document.getElementById("bo-p2-name").textContent = activeMatch.player2;
-  document.getElementById("btn-bo-award-p1").textContent = `Award Leg to ${activeMatch.player1}`;
-  document.getElementById("btn-bo-award-p2").textContent = `Award Leg to ${activeMatch.player2}`;
+
+  const isDecidingLeg = (activeMatch.legsP1 + 1 >= activeMatch.legsToWin) ||
+                        (activeMatch.legsP2 + 1 >= activeMatch.legsToWin) ||
+                        (activeMatch.legsToWin === 1);
+
+  const btnP1 = document.getElementById("btn-bo-award-p1");
+  const btnP2 = document.getElementById("btn-bo-award-p2");
+  const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+  const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+
+  if (isDecidingLeg) {
+    if (btnP1) btnP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
+    if (btnP2) btnP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
+    if (btnMatchP1) btnMatchP1.style.display = "none";
+    if (btnMatchP2) btnMatchP2.style.display = "none";
+  } else {
+    if (btnP1) btnP1.textContent = `Award Leg to ${activeMatch.player1}`;
+    if (btnP2) btnP2.textContent = `Award Leg to ${activeMatch.player2}`;
+    if (btnMatchP1) {
+      btnMatchP1.style.display = "inline-flex";
+      btnMatchP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
+    }
+    if (btnMatchP2) {
+      btnMatchP2.style.display = "inline-flex";
+      btnMatchP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
+    }
+  }
+
   resetBullOffThrows();
   modal.style.display = "flex";
 }
@@ -980,14 +1007,39 @@ function evaluateBullOff() {
   }
 }
 
-document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0));
-document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1));
-document.getElementById("btn-bo-reset").addEventListener("click", resetBullOffThrows);
+const btnBoAwardP1 = document.getElementById("btn-bo-award-p1");
+if (btnBoAwardP1) btnBoAwardP1.addEventListener("click", () => resolveBullOffWinner(0, false));
 
-function resolveBullOffWinner(winnerIndex) {
+const btnBoAwardP2 = document.getElementById("btn-bo-award-p2");
+if (btnBoAwardP2) btnBoAwardP2.addEventListener("click", () => resolveBullOffWinner(1, false));
+
+const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+if (btnMatchP1) btnMatchP1.addEventListener("click", () => resolveBullOffWinner(0, true));
+
+const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+if (btnMatchP2) btnMatchP2.addEventListener("click", () => resolveBullOffWinner(1, true));
+
+const btnBoReset = document.getElementById("btn-bo-reset");
+if (btnBoReset) btnBoReset.addEventListener("click", resetBullOffThrows);
+
+function resolveBullOffWinner(winnerIndex, decideEntireMatch = false) {
   if (!activeMatch) return;
-  document.getElementById("modal-bull-off").style.display = "none";
-  activeMatch.resolveBullOff(winnerIndex);
+  const modal = document.getElementById("modal-bull-off");
+  if (modal) modal.style.display = "none";
+  activeMatch.resolveBullOff(winnerIndex, decideEntireMatch);
+
+  // Directly record tournament match result if finished
+  if (activeMatch.isFinished && currentTournamentMatch && activeTournament) {
+    activeTournament.recordMatchResult(currentTournamentMatch.id, {
+      winner: activeMatch.winner,
+      legsP1: activeMatch.legsP1,
+      legsP2: activeMatch.legsP2,
+      p1Stats: activeMatch.getPlayerStats(0),
+      p2Stats: activeMatch.getPlayerStats(1)
+    });
+    saveTournamentToStorage();
+  }
+
   renderScorer();
 }
 
