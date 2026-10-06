@@ -1108,8 +1108,6 @@
         <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
           <button class="btn btn-primary" id="btn-bo-award-p1">Award Leg to Player 1</button>
           <button class="btn btn-primary" id="btn-bo-award-p2">Award Leg to Player 2</button>
-          <button class="btn btn-gold" id="btn-bo-match-p1" style="display: none;">🏆 Award Match to Player 1</button>
-          <button class="btn btn-gold" id="btn-bo-match-p2" style="display: none;">🏆 Award Match to Player 2</button>
           <button class="btn btn-secondary" id="btn-bo-reset">Reset Throws</button>
         </div>
       </div>
@@ -2725,6 +2723,8 @@
       // --- Bull-off Modal Handlers ---
       let boThrows = { p1: null, p2: null };
 
+      let bullOffDecidingMatch = false;
+
       function openBullOffModal() {
         if (!activeMatch) return;
         const modal = document.getElementById("modal-bull-off");
@@ -2732,31 +2732,18 @@
         document.getElementById("bo-p1-name").textContent = activeMatch.player1;
         document.getElementById("bo-p2-name").textContent = activeMatch.player2;
 
-        const isDecidingLeg = (activeMatch.legsP1 + 1 >= activeMatch.legsToWin) ||
-                              (activeMatch.legsP2 + 1 >= activeMatch.legsToWin) ||
-                              (activeMatch.legsToWin === 1);
+        bullOffDecidingMatch = (activeMatch.legsP1 + 1 >= activeMatch.legsToWin) ||
+                               (activeMatch.legsP2 + 1 >= activeMatch.legsToWin) ||
+                               (activeMatch.legsToWin === 1);
 
         const btnP1 = document.getElementById("btn-bo-award-p1");
         const btnP2 = document.getElementById("btn-bo-award-p2");
-        const btnMatchP1 = document.getElementById("btn-bo-match-p1");
-        const btnMatchP2 = document.getElementById("btn-bo-match-p2");
-
-        if (isDecidingLeg) {
+        if (bullOffDecidingMatch) {
           btnP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
           btnP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
-          if (btnMatchP1) btnMatchP1.style.display = "none";
-          if (btnMatchP2) btnMatchP2.style.display = "none";
         } else {
           btnP1.textContent = `Award Leg to ${activeMatch.player1}`;
           btnP2.textContent = `Award Leg to ${activeMatch.player2}`;
-          if (btnMatchP1) {
-            btnMatchP1.style.display = "inline-flex";
-            btnMatchP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
-          }
-          if (btnMatchP2) {
-            btnMatchP2.style.display = "inline-flex";
-            btnMatchP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
-          }
         }
 
         resetBullOffThrows();
@@ -2808,14 +2795,8 @@
         }
       }
 
-      document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0, false));
-      document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1, false));
-
-      const btnMatchP1 = document.getElementById("btn-bo-match-p1");
-      if (btnMatchP1) btnMatchP1.addEventListener("click", () => resolveBullOffWinner(0, true));
-
-      const btnMatchP2 = document.getElementById("btn-bo-match-p2");
-      if (btnMatchP2) btnMatchP2.addEventListener("click", () => resolveBullOffWinner(1, true));
+      document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0, bullOffDecidingMatch));
+      document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1, bullOffDecidingMatch));
 
       document.getElementById("btn-bo-reset").addEventListener("click", resetBullOffThrows);
 
