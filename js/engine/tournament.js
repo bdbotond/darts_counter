@@ -107,6 +107,15 @@
         });
       }
 
+      getGroupStandings(groupId) {
+        const group = this.groups.find(g => g.id === groupId);
+        return group ? group.standings : [];
+      }
+
+      advanceFromGroupsToKnockout() {
+        return this.generateKnockoutFromGroups();
+      }
+
       generateKnockoutFromGroups() {
         const qualified = [];
         const advance = Math.max(1, this.advancePerGroup);
@@ -319,4 +328,6 @@
         return [headers.join(","), ...rows.map(r => r.join(","))].join("\r\n");
       }
     }
+
+    window.Tournament = Tournament;
 

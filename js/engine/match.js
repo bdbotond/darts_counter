@@ -382,3 +382,5 @@ class DartsMatch {
         };
       }
     }
+
+    window.DartsMatch = DartsMatch;

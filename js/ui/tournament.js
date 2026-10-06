@@ -38,63 +38,125 @@ App.renderTournamentDashboard = function() {
   const tourney = App.activeTournament;
   if (!tourney) return;
   document.getElementById("tourney-dash-title").textContent = tourney.name;
-  document.getElementById("tourney-dash-meta").textContent = `Format: ${tourney.format === "groups" ? "Groups + Knockout Tree" : "Direct Knockout Tree"} | Status: ${tourney.status.toUpperCase()}`;
+  document.getElementById("tourney-dash-meta").innerHTML = `
+    <span class="group-badge" style="color: var(--accent); background: rgba(35, 134, 54, 0.15);">
+      ${tourney.format === "groups" ? "Groups + Knockout Tree" : "Direct Knockout Tree"}
+    </span>
+    <span class="group-badge" style="color: var(--accent-gold); background: rgba(227, 179, 65, 0.15); margin-left: 0.5rem;">
+      STATUS: ${tourney.status.toUpperCase()}
+    </span>
+  `;
 
   const groupsContainer = document.getElementById("tourney-groups-container");
   const advanceBox = document.getElementById("tourney-advance-box");
   const bracketContainer = document.getElementById("tourney-bracket-container");
 
   if (tourney.format === "groups") {
-    groupsContainer.style.display = "block";
+    groupsContainer.style.display = "grid";
     groupsContainer.innerHTML = "";
+    const advance = Math.max(1, tourney.advancePerGroup || 2);
+
     tourney.groups.forEach(group => {
       const card = document.createElement("div");
       card.className = "group-card";
-      const table = tourney.getGroupStandings(group.id);
+      const table = (group.standings && group.standings.length) ? group.standings : (tourney.getGroupStandings ? tourney.getGroupStandings(group.id) : []);
+      const completedCount = group.matches.filter(m => m.isFinished).length;
+      const totalCount = group.matches.length;
 
       let tableHtml = `
-        <h4>${group.name}</h4>
-        <table class="table" style="margin-top:0.75rem;">
-          <thead>
-            <tr><th>Pos</th><th>Player</th><th>Pld</th><th>W</th><th>L</th><th>+/-</th><th>Pts</th></tr>
-          </thead>
-          <tbody>
+        <div class="group-header">
+          <h3 class="group-title">🎯 ${group.name}</h3>
+          <span class="group-badge">${group.players.length} Players • Top ${advance} Advance</span>
+        </div>
+
+        <div>
+          <div class="section-subtitle">
+            <span>Standings Table</span>
+            <span style="font-size: 0.75rem; color: var(--accent); font-weight: 500;">● Green = Qualifying Zone</span>
+          </div>
+          <div class="table-wrap">
+            <table class="stats-table">
+              <thead>
+                <tr>
+                  <th style="width: 42px; text-align: center;">Pos</th>
+                  <th>Player</th>
+                  <th style="width: 42px; text-align: center;">Pld</th>
+                  <th style="width: 40px; text-align: center;">W</th>
+                  <th style="width: 40px; text-align: center;">L</th>
+                  <th style="width: 48px; text-align: center;">+/-</th>
+                  <th style="width: 48px; text-align: center; color: var(--accent-gold);">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
       `;
+
       table.forEach((row, idx) => {
+        const isQualifying = idx < advance;
+        const diffDisplay = row.diff > 0 ? `+${row.diff}` : `${row.diff}`;
         tableHtml += `
-          <tr>
-            <td><strong>#${idx + 1}</strong></td>
-            <td>${row.player}</td><td>${row.played}</td><td>${row.won}</td><td>${row.lost}</td>
-            <td>${row.diff > 0 ? "+" + row.diff : row.diff}</td><td><strong>${row.points}</strong></td>
+          <tr class="${isQualifying ? 'qualifying-row' : ''}">
+            <td style="text-align: center; font-weight: 700;">#${idx + 1}</td>
+            <td><strong>${row.player}</strong></td>
+            <td style="text-align: center;">${row.played}</td>
+            <td style="text-align: center;">${row.won}</td>
+            <td style="text-align: center;">${row.lost}</td>
+            <td style="text-align: center; color: ${row.diff > 0 ? 'var(--accent)' : (row.diff < 0 ? 'var(--accent-red)' : 'var(--text-muted)')}; font-weight: 600;">${diffDisplay}</td>
+            <td style="text-align: center; font-weight: 700; color: var(--accent-gold); font-size: 0.95rem;">${row.points}</td>
           </tr>
         `;
       });
-      tableHtml += `</tbody></table>`;
+      tableHtml += `</tbody></table></div></div>`;
 
-      tableHtml += `<h5 style="margin-top:1.25rem; font-size:0.85rem; color:var(--text-muted);">Matches</h5><div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">`;
+      tableHtml += `
+        <div>
+          <div class="section-subtitle">
+            <span>Matches</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">${completedCount}/${totalCount} Completed</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+      `;
+
       group.matches.forEach(m => {
         const isDone = m.isFinished;
         const resText = isDone ? `${m.legsP1} - ${m.legsP2}` : "vs";
-        const wClass1 = m.winner === m.player1 ? "color:var(--accent-gold); font-weight:700;" : "";
-        const wClass2 = m.winner === m.player2 ? "color:var(--accent-gold); font-weight:700;" : "";
+        const wClass1 = m.winner === m.player1 ? "winner" : "";
+        const wClass2 = m.winner === m.player2 ? "winner" : "";
         tableHtml += `
-          <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-input); padding:0.5rem 0.75rem; border-radius:6px; font-size:0.9rem;">
-            <span style="${wClass1}">${m.player1}</span>
-            <span style="font-weight:700; background:var(--bg-card); padding:2px 8px; border-radius:4px;">${resText}</span>
-            <span style="${wClass2}">${m.player2}</span>
-            <button class="btn btn-secondary btn-sm" onclick="App.launchTournamentFixture('${m.id}')">${isDone ? "Modify / Replay" : "Play"}</button>
+          <div class="fixture-card ${isDone ? 'finished' : ''}">
+            <div class="fixture-matchup">
+              <span class="fixture-player p1 ${wClass1}">${m.player1}</span>
+              <span class="fixture-score-badge ${isDone ? 'finished' : ''}">${resText}</span>
+              <span class="fixture-player p2 ${wClass2}">${m.player2}</span>
+            </div>
+            <button class="btn ${isDone ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="App.launchTournamentFixture('${m.id}')" style="min-width: 65px;">
+              ${isDone ? "Edit" : "Play"}
+            </button>
           </div>
         `;
       });
-      tableHtml += `</div>`;
+
+      tableHtml += `</div></div>`;
       card.innerHTML = tableHtml;
       groupsContainer.appendChild(card);
     });
 
     if (tourney.status === "groups") {
       advanceBox.style.display = "block";
-      document.getElementById("btn-advance-to-knockout").onclick = () => {
-        tourney.advanceFromGroupsToKnockout();
+      const allDone = tourney.groups.every(g => g.matches.every(m => m.isFinished));
+      const advanceBtn = document.getElementById("btn-advance-to-knockout");
+      if (allDone) {
+        advanceBtn.className = "btn btn-primary btn-lg";
+        advanceBtn.innerHTML = "🏆 All Group Matches Completed! Advance to Knockout Bracket →";
+      } else {
+        advanceBtn.className = "btn btn-gold btn-lg";
+        advanceBtn.innerHTML = "🚀 Advance Qualifiers to Knockout Bracket";
+      }
+      advanceBtn.onclick = () => {
+        if (!allDone && !confirm("Some group matches are still unplayed. Advance top players to knockout anyway?")) {
+          return;
+        }
+        if (tourney.advanceFromGroupsToKnockout) tourney.advanceFromGroupsToKnockout();
+        else tourney.generateKnockoutFromGroups();
         App.saveTournamentToStorage();
         App.renderTournamentDashboard();
       };

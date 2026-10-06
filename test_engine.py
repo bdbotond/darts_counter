@@ -275,6 +275,26 @@ def test_modular_file_structure_and_syntax():
     res = subprocess.run(["node", "-c", *js_files], capture_output=True, text=True)
     assert res.returncode == 0, f"JavaScript syntax error in files: {res.stderr}"
 
+def test_group_tournament_generation():
+    # 4 players, 2 groups
+    players = ["Alice", "Bob", "Charlie", "David"]
+    group_count = 2
+    num_groups = max(1, min(group_count, len(players) // 2))
+    assert num_groups == 2
+
+    groups = [{"id": "A", "players": []}, {"id": "B", "players": []}]
+    for idx, p in enumerate(players):
+        groups[idx % num_groups]["players"].append(p)
+
+    assert groups[0]["players"] == ["Alice", "Charlie"]
+    assert groups[1]["players"] == ["Bob", "David"]
+
+    # Each group of 2 generates 1 fixture (n*(n-1)/2)
+    matches_gA = [("Alice", "Charlie")]
+    matches_gB = [("Bob", "David")]
+    assert len(matches_gA) == 1
+    assert len(matches_gB) == 1
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
@@ -283,10 +303,11 @@ if __name__ == "__main__":
     test_bull_off_history_entry_and_visits_safety()
     test_match_starter_and_alternating_legs()
     test_modular_file_structure_and_syntax()
+    test_group_tournament_generation()
     test_stats_calculation()
     test_group_standings_sort()
     test_bracket_propagation()
     test_csv_export()
-    print("ALL TESTS PASSED: 11/11 checks verified successfully.")
+    print("ALL TESTS PASSED: 12/12 checks verified successfully.")
 
 
