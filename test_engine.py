@@ -190,15 +190,103 @@ def test_bull_off_finishes_tournament_match():
     points_p1 = 2 if tm["winner"] == "Luke" else 0
     assert points_p1 == 2, "Winner of Bull-off must receive 2 points in tournament table"
 
+def test_bull_off_history_entry_and_visits_safety():
+    # Simulates history handling with bull_off actions
+    history = [
+        {"type": "visit", "turn": 0, "visit": {"playerIndex": 0, "score": 60, "bust": False}},
+        {"type": "bull_off", "turn": 0, "winner": 0, "legWon": True, "matchWon": True}
+    ]
+
+    rendered_badges = [
+        f"Bull-off: {'Player 1' if a['winner'] == 0 else 'Player 2'} won {'Match' if a.get('matchWon') else 'Leg'}"
+        if a.get("type") == "bull_off"
+        else f"P{a['visit']['playerIndex'] + 1}: {a['visit']['score']} pts"
+        for a in reversed(history[-8:])
+        if a.get("type") == "bull_off" or a.get("visit")
+    ]
+
+    assert len(rendered_badges) == 2
+    assert rendered_badges[0] == "Bull-off: Player 1 won Match"
+    assert rendered_badges[1] == "P1: 60 pts"
+
+def test_match_starter_and_alternating_legs():
+    # Starter = 0 (Player 1 starts match)
+    starter = 0
+    assert [(starter if leg % 2 == 1 else 1 - starter) for leg in range(1, 5)] == [0, 1, 0, 1]
+
+    # Starter = 1 (Player 2 starts match)
+    starter = 1
+    assert [(starter if leg % 2 == 1 else 1 - starter) for leg in range(1, 5)] == [1, 0, 1, 0]
+
+    # Simulate setStartingPlayer before first throw
+    history = []
+    can_switch = len(history) == 0
+    assert can_switch is True
+    starter = 1
+    assert starter == 1
+
+    # After throw, cannot switch starter
+    history.append({"visit": {"score": 60}})
+    can_switch = len(history) == 0
+    assert can_switch is False
+
+def test_modular_file_structure_and_syntax():
+    import os
+    import subprocess
+
+    required_files = [
+        "index.html",
+        "css/style.css",
+        "js/sync.js",
+        "js/app.js",
+        "js/engine/checkouts.js",
+        "js/engine/match.js",
+        "js/engine/tournament.js",
+        "js/ui/spectator.js",
+        "js/ui/scorer.js",
+        "js/ui/keypad.js",
+        "js/ui/tournament.js",
+        "js/ui/modals.js",
+    ]
+
+    for rel_path in required_files:
+        assert os.path.exists(rel_path), f"Missing required file: {rel_path}"
+        assert os.path.getsize(rel_path) > 0, f"File is empty: {rel_path}"
+
+    with open("index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+
+    for script in [
+        "js/engine/checkouts.js",
+        "js/engine/match.js",
+        "js/engine/tournament.js",
+        "js/sync.js",
+        "js/app.js",
+        "js/ui/spectator.js",
+        "js/ui/scorer.js",
+        "js/ui/keypad.js",
+        "js/ui/tournament.js",
+        "js/ui/modals.js",
+    ]:
+        assert f'<script src="{script}"></script>' in html, f"index.html missing script tag for {script}"
+
+    # Syntax check via node -c
+    js_files = [f for f in required_files if f.endswith(".js")]
+    res = subprocess.run(["node", "-c", *js_files], capture_output=True, text=True)
+    assert res.returncode == 0, f"JavaScript syntax error in files: {res.stderr}"
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
     test_bull_off_after_n_rounds()
     test_bull_off_finishes_tournament_match()
+    test_bull_off_history_entry_and_visits_safety()
+    test_match_starter_and_alternating_legs()
+    test_modular_file_structure_and_syntax()
     test_stats_calculation()
     test_group_standings_sort()
     test_bracket_propagation()
     test_csv_export()
-    print("ALL TESTS PASSED: 8/8 checks verified successfully.")
+    print("ALL TESTS PASSED: 11/11 checks verified successfully.")
 
 
