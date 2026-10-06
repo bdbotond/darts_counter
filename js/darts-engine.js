@@ -105,42 +105,108 @@ export class DartsMatch {
 
     const pIdx = this.currentTurn;
     const currentScore = this.currentLeg.scores[pIdx];
-    let remaining = currentScore - score;
     let isBust = false;
     let isWon = false;
     let actualDoubleAttempts = Number(doubleAttempts) || 0;
     let actualDoubleHit = 0;
+    let finalDartsCount = Math.min(Math.max(dartsCount, 1), 3);
+    let finalScoreLeft = currentScore;
+    let visitScore = score;
 
-    if (this.doubleOut) {
-      if (remaining < 0 || remaining === 1) {
-        isBust = true;
-      } else if (remaining === 0) {
-        // Winning leg on double
-        isWon = true;
-        actualDoubleHit = 1;
-        if (actualDoubleAttempts === 0) actualDoubleAttempts = 1;
+    if (dartBreakdown && dartBreakdown.length > 0) {
+      // Dart-by-dart exact verification (keypad mode)
+      let running = currentScore;
+      let thrown = 0;
+      let totalPts = 0;
+
+      for (let i = 0; i < dartBreakdown.length; i++) {
+        const d = dartBreakdown[i];
+        thrown++;
+        totalPts += d.score;
+        const next = running - d.score;
+
+        if (this.doubleOut) {
+          if (next < 0 || next === 1) {
+            isBust = true;
+            break;
+          } else if (next === 0) {
+            if (d.isDouble) {
+              isWon = true;
+              actualDoubleHit = 1;
+              running = 0;
+              break;
+            } else {
+              // Reached 0 without a double = BUST in double out
+              isBust = true;
+              break;
+            }
+          } else {
+            running = next;
+          }
+        } else {
+          // Single out
+          if (next < 0) {
+            isBust = true;
+            break;
+          } else if (next === 0) {
+            isWon = true;
+            running = 0;
+            break;
+          } else {
+            running = next;
+          }
+        }
+      }
+
+      finalDartsCount = thrown;
+      if (isBust) {
+        finalScoreLeft = currentScore;
+        visitScore = 0;
+      } else {
+        finalScoreLeft = running;
+        visitScore = totalPts;
       }
     } else {
-      if (remaining < 0) {
-        isBust = true;
-      } else if (remaining === 0) {
-        isWon = true;
+      // Numeric visit input
+      const remaining = currentScore - score;
+
+      if (this.doubleOut) {
+        if (remaining < 0 || remaining === 1) {
+          isBust = true;
+        } else if (remaining === 0) {
+          // In Double Out, checkout is only possible if currentScore has a valid double finish (<=170 and not a bogey number)
+          if (CHECKOUT_TABLE[currentScore]) {
+            isWon = true;
+            actualDoubleHit = 1;
+            if (actualDoubleAttempts === 0) actualDoubleAttempts = 1;
+          } else {
+            // Impossible checkout from 180, 169, 168, etc. -> BUST
+            isBust = true;
+          }
+        }
+      } else {
+        if (remaining < 0) {
+          isBust = true;
+        } else if (remaining === 0) {
+          isWon = true;
+        }
       }
+
+      finalScoreLeft = isBust ? currentScore : remaining;
+      visitScore = isBust ? 0 : score;
     }
 
-    const previousScore = currentScore;
-    const finalScoreLeft = isBust ? currentScore : remaining;
     this.currentLeg.scores[pIdx] = finalScoreLeft;
 
     const visitRecord = {
       playerIndex: pIdx,
-      score: isBust ? 0 : score,
+      score: visitScore,
       enteredScore: score,
-      dartsCount: Math.min(Math.max(dartsCount, 1), 3),
+      dartsCount: finalDartsCount,
       doubleAttempts: actualDoubleAttempts,
       doubleHit: actualDoubleHit,
       bust: isBust,
-      scoreBefore: previousScore,
+      scoreBefore: currentScore,
       scoreLeft: finalScoreLeft,
       dartBreakdown
     };

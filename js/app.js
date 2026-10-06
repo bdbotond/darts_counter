@@ -279,6 +279,12 @@ function submitNumericScore(scoreVal, isBust = false) {
     return;
   }
 
+  const pIdx = activeMatch.currentTurn;
+  const currentScore = activeMatch.currentLeg.scores[pIdx];
+  if (activeMatch.doubleOut && !isBust && (currentScore - score === 0) && !isFinishPossible(currentScore, true)) {
+    alert(`Bust! Cannot checkout from ${currentScore} on Double Out (maximum finish is 170).`);
+  }
+
   const dartsCount = parseInt(document.getElementById("numeric-darts-count").value, 10) || 3;
   let doubleAttempts = selectedDoubleAttempts;
 

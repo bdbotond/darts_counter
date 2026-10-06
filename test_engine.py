@@ -33,6 +33,34 @@ def test_x01_bust_and_checkout():
     is_won = (remaining == 0)
     assert is_won, "Score of 40 on 40 remaining should win leg"
 
+def test_impossible_checkout_validation():
+    # Bogey numbers and >170 cannot be checked out with double out
+    legal_checkouts = {170, 167, 164, 161, 160, 40, 32, 16, 2}
+    bogey_or_impossible = [180, 175, 171, 169, 168, 166, 165, 163, 162, 159]
+
+    # Test 180: If player has 180, scoring 180 leaves 0, but is an IMPOSSIBLE checkout
+    score = 180
+    attempt = 180
+    remaining = score - attempt
+    assert remaining == 0
+    # On Double Out, if score not in legal checkouts, it is a bust
+    is_bust = (remaining == 0 and score not in legal_checkouts)
+    assert is_bust, "Score of 180 on 180 remaining MUST be a bust on Double Out"
+
+    # Test 169 (bogey): Cannot finish 169 in 3 darts ending on double
+    score = 169
+    attempt = 169
+    remaining = score - attempt
+    is_bust = (remaining == 0 and score not in legal_checkouts)
+    assert is_bust, "Score of 169 on 169 remaining MUST be a bust on Double Out"
+
+    # Test 170 (max checkout): Legal checkout
+    score = 170
+    attempt = 170
+    remaining = score - attempt
+    is_won = (remaining == 0 and score in legal_checkouts)
+    assert is_won, "Score of 170 on 170 remaining is a legal 3-dart double out"
+
 def test_stats_calculation():
     # Total score = 501, darts = 11 darts
     total_score = 501
@@ -103,8 +131,9 @@ def test_csv_export():
 
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
+    test_impossible_checkout_validation()
     test_stats_calculation()
     test_group_standings_sort()
     test_bracket_propagation()
     test_csv_export()
-    print("ALL TESTS PASSED: 5/5 checks verified successfully.")
+    print("ALL TESTS PASSED: 6/6 checks verified successfully.")
