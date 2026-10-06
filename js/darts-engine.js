@@ -60,6 +60,7 @@ export class DartsMatch {
     this.maxLegs = config.maxLegs || 0; // 0 = first to legsToWin, >0 = max legs
     this.doubleOut = config.doubleOut !== false;
     this.trackDoubles = config.trackDoubles !== false;
+    this.bullOffAfterRounds = parseInt(config.bullOffAfterRounds, 10) || 0; // 0 = disabled, >0 = bull-off after N rounds
 
     this.legsP1 = 0;
     this.legsP2 = 0;
@@ -250,7 +251,55 @@ export class DartsMatch {
     }
 
     this.history.push(historyEntry);
-    return { success: true, visit: visitRecord, isWon, isFinished: this.isFinished };
+    const requiresBullOff = !isWon && this.bullOffAfterRounds > 0 &&
+      this.currentLeg.visits[0].length >= this.bullOffAfterRounds &&
+      this.currentLeg.visits[1].length >= this.bullOffAfterRounds;
+
+    return { success: true, visit: visitRecord, isWon, isFinished: this.isFinished, requiresBullOff };
+  }
+
+  getCurrentRound() {
+    if (!this.currentLeg) return 1;
+    const v1 = this.currentLeg.visits[0].length;
+    const v2 = this.currentLeg.visits[1].length;
+    return Math.min(v1, v2) + 1;
+  }
+
+  resolveBullOff(winnerIndex) {
+    if (this.isFinished) return false;
+    this.currentLeg.winner = winnerIndex;
+    this.currentLeg.decidedBy = "bull_off";
+    if (winnerIndex === 0) this.legsP1++;
+    else this.legsP2++;
+
+    this.legs.push(JSON.parse(JSON.stringify(this.currentLeg)));
+
+    const wonByLegs = (this.legsP1 >= this.legsToWin || this.legsP2 >= this.legsToWin);
+    const totalLegsPlayed = this.legsP1 + this.legsP2;
+    const reachedMaxLegs = this.maxLegs > 0 && totalLegsPlayed >= this.maxLegs;
+
+    const historyEntry = {
+      type: "bull_off",
+      legIndex: this.currentLegIndex,
+      turn: winnerIndex,
+      winner: winnerIndex,
+      legWon: true,
+      matchWon: false
+    };
+
+    if (wonByLegs || reachedMaxLegs) {
+      this.isFinished = true;
+      if (this.legsP1 > this.legsP2) this.winner = this.player1;
+      else if (this.legsP2 > this.legsP1) this.winner = this.player2;
+      else this.winner = "Draw";
+      historyEntry.matchWon = true;
+    } else {
+      this.currentLegIndex++;
+      this.initLeg();
+    }
+
+    this.history.push(historyEntry);
+    return { success: true, isFinished: this.isFinished, winner: this.winner };
   }
 
   undo() {
@@ -260,6 +309,21 @@ export class DartsMatch {
     if (lastAction.matchWon) {
       this.isFinished = false;
       this.winner = null;
+    }
+
+    if (lastAction.type === "bull_off") {
+      const restoredLeg = this.legs.pop();
+      if (lastAction.winner === 0) this.legsP1--;
+      else this.legsP2--;
+
+      this.currentLegIndex = restoredLeg.legIndex;
+      this.currentLeg = restoredLeg;
+      this.currentLeg.winner = null;
+      this.currentLeg.decidedBy = null;
+      const v1 = this.currentLeg.visits[0].length;
+      const v2 = this.currentLeg.visits[1].length;
+      this.currentTurn = v1 > v2 ? 1 : 0;
+      return true;
     }
 
     if (lastAction.legWon) {
@@ -378,6 +442,11 @@ export class DartsMatch {
       p2Stats: this.getPlayerStats(1),
       isFinished: this.isFinished,
       winner: this.winner,
+      bullOffAfterRounds: this.bullOffAfterRounds,
+      currentRound: this.getCurrentRound(),
+      isBullOffDue: (this.bullOffAfterRounds > 0 && !this.isFinished &&
+                     this.currentLeg.visits[0].length >= this.bullOffAfterRounds &&
+                     this.currentLeg.visits[1].length >= this.bullOffAfterRounds),
       lastVisit: this.history.length > 0 ? this.history[this.history.length - 1].visit : null
     };
   }

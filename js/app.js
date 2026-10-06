@@ -71,6 +71,22 @@ document.getElementById("setup-game-type").addEventListener("change", (e) => {
   customGroup.style.display = e.target.value === "custom" ? "block" : "none";
 });
 
+const setupBullToggle = document.getElementById("setup-bull-off-toggle");
+const setupBullConfig = document.getElementById("setup-bull-off-config");
+if (setupBullToggle && setupBullConfig) {
+  setupBullToggle.addEventListener("change", (e) => {
+    setupBullConfig.style.display = e.target.checked ? "flex" : "none";
+  });
+}
+
+const tourneyBullToggle = document.getElementById("tourney-bull-off-toggle");
+const tourneyBullConfig = document.getElementById("tourney-bull-off-config");
+if (tourneyBullToggle && tourneyBullConfig) {
+  tourneyBullToggle.addEventListener("change", (e) => {
+    tourneyBullConfig.style.display = e.target.checked ? "flex" : "none";
+  });
+}
+
 document.getElementById("btn-launch-match").addEventListener("click", () => {
   const p1 = document.getElementById("setup-p1-name").value.trim() || "Player 1";
   const p2 = document.getElementById("setup-p2-name").value.trim() || "Player 2";
@@ -82,6 +98,8 @@ document.getElementById("btn-launch-match").addEventListener("click", () => {
   const legsToWin = parseInt(document.getElementById("setup-legs-to-win").value, 10) || 3;
   const doubleOut = document.getElementById("setup-out-mode").value === "double";
   const trackDoubles = document.getElementById("setup-track-doubles").checked;
+  const bullOff = setupBullToggle && setupBullToggle.checked;
+  const bullOffAfterRounds = bullOff ? (parseInt(document.getElementById("setup-bull-off-rounds").value, 10) || 15) : 0;
 
   currentTournamentMatch = null;
   document.getElementById("tournament-context-badge").style.display = "none";
@@ -92,13 +110,16 @@ document.getElementById("btn-launch-match").addEventListener("click", () => {
     startingScore,
     legsToWin,
     doubleOut,
-    trackDoubles
+    trackDoubles,
+    bullOffAfterRounds
   });
 });
 
 function startMatch(config) {
   activeMatch = new DartsMatch(config);
-  document.getElementById("match-info-badge").textContent = `${config.startingScore} ${config.doubleOut ? "Double Out" : "Single Out"} (First to ${config.legsToWin})`;
+  let info = `${config.startingScore} ${config.doubleOut ? "Double Out" : "Single Out"} (First to ${config.legsToWin})`;
+  if (config.bullOffAfterRounds > 0) info += ` • Bull-off R${config.bullOffAfterRounds}`;
+  document.getElementById("match-info-badge").textContent = info;
   resetKeypad();
   renderScorer();
   showView("scorer");
@@ -159,6 +180,20 @@ function renderScorer() {
   } else {
     p2Box.classList.add("active-turn");
     p1Box.classList.remove("active-turn");
+  }
+
+  const roundBadge = document.getElementById("scorer-round-badge");
+  if (roundBadge) {
+    const curR = activeMatch.getCurrentRound();
+    if (activeMatch.bullOffAfterRounds > 0) {
+      roundBadge.textContent = `Round ${curR}/${activeMatch.bullOffAfterRounds}`;
+    } else {
+      roundBadge.textContent = `Round ${curR}`;
+    }
+  }
+
+  if (state.isBullOffDue) {
+    openBullOffModal();
   }
 
   // Darts at double prompt display check
@@ -529,6 +564,8 @@ document.getElementById("btn-create-tourney-start").addEventListener("click", ()
   const gameScore = parseInt(document.getElementById("tourney-game-type").value, 10) || 501;
   const legsToWin = parseInt(document.getElementById("tourney-legs-to-win").value, 10) || 2;
   const doubleOut = document.getElementById("tourney-out-mode").value === "double";
+  const tBullOff = tourneyBullToggle && tourneyBullToggle.checked;
+  const tBullRounds = tBullOff ? (parseInt(document.getElementById("tourney-bull-off-rounds").value, 10) || 15) : 0;
 
   activeTournament = new Tournament({
     name: "Darts Championship",
@@ -539,7 +576,8 @@ document.getElementById("btn-create-tourney-start").addEventListener("click", ()
     startingScore: gameScore,
     legsToWin,
     doubleOut,
-    trackDoubles: true
+    trackDoubles: true,
+    bullOffAfterRounds: tBullRounds
   });
 
   activeTournament.start();
@@ -676,7 +714,8 @@ function launchTournamentFixture(matchId) {
     startingScore: activeTournament.matchSettings.startingScore,
     legsToWin: activeTournament.matchSettings.legsToWin,
     doubleOut: activeTournament.matchSettings.doubleOut,
-    trackDoubles: activeTournament.matchSettings.trackDoubles
+    trackDoubles: activeTournament.matchSettings.trackDoubles,
+    bullOffAfterRounds: activeTournament.matchSettings.bullOffAfterRounds
   });
 }
 
@@ -812,6 +851,77 @@ function loadTournamentFromStorage() {
 }
 
 // Initial Boot
+// --- Bull-off Modal Handlers ---
+let boThrows = { p1: null, p2: null };
+
+function openBullOffModal() {
+  if (!activeMatch) return;
+  const modal = document.getElementById("modal-bull-off");
+  document.getElementById("bo-rounds-count").textContent = activeMatch.bullOffAfterRounds;
+  document.getElementById("bo-p1-name").textContent = activeMatch.player1;
+  document.getElementById("bo-p2-name").textContent = activeMatch.player2;
+  document.getElementById("btn-bo-award-p1").textContent = `Award Leg to ${activeMatch.player1}`;
+  document.getElementById("btn-bo-award-p2").textContent = `Award Leg to ${activeMatch.player2}`;
+  resetBullOffThrows();
+  modal.style.display = "flex";
+}
+
+function resetBullOffThrows() {
+  boThrows = { p1: null, p2: null };
+  document.getElementById("bo-p1-val").textContent = "-";
+  document.getElementById("bo-p2-val").textContent = "-";
+  document.getElementById("bo-status-msg").textContent = "Record each player's throw at the Bull:";
+  document.querySelectorAll(".bo-p1-btn, .bo-p2-btn").forEach(b => b.classList.remove("selected", "btn-gold"));
+}
+
+document.querySelectorAll(".bo-p1-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".bo-p1-btn").forEach(b => b.classList.remove("selected", "btn-gold"));
+    btn.classList.add("selected", "btn-gold");
+    boThrows.p1 = parseInt(btn.dataset.val, 10);
+    const label = btn.dataset.val === "50" ? "Bullseye (50)" : (btn.dataset.val === "25" ? "Outer Bull (25)" : "Miss (0)");
+    document.getElementById("bo-p1-val").textContent = label;
+    evaluateBullOff();
+  });
+});
+
+document.querySelectorAll(".bo-p2-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".bo-p2-btn").forEach(b => b.classList.remove("selected", "btn-gold"));
+    btn.classList.add("selected", "btn-gold");
+    boThrows.p2 = parseInt(btn.dataset.val, 10);
+    const label = btn.dataset.val === "50" ? "Bullseye (50)" : (btn.dataset.val === "25" ? "Outer Bull (25)" : "Miss (0)");
+    document.getElementById("bo-p2-val").textContent = label;
+    evaluateBullOff();
+  });
+});
+
+function evaluateBullOff() {
+  const msg = document.getElementById("bo-status-msg");
+  if (boThrows.p1 === null || boThrows.p2 === null) {
+    msg.textContent = "Throw for both players to determine result:";
+    return;
+  }
+  if (boThrows.p1 > boThrows.p2) {
+    msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${activeMatch.player1}</strong> won the Bull-off!`;
+  } else if (boThrows.p2 > boThrows.p1) {
+    msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${activeMatch.player2}</strong> won the Bull-off!`;
+  } else {
+    msg.innerHTML = `⚖️ <strong>Tie (${boThrows.p1} pts each)!</strong> Re-throw, or pick who was closer.`;
+  }
+}
+
+document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0));
+document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1));
+document.getElementById("btn-bo-reset").addEventListener("click", resetBullOffThrows);
+
+function resolveBullOffWinner(winnerIndex) {
+  if (!activeMatch) return;
+  document.getElementById("modal-bull-off").style.display = "none";
+  activeMatch.resolveBullOff(winnerIndex);
+  renderScorer();
+}
+
 initKeypadTargets();
 renderPlayerTags();
 loadTournamentFromStorage();

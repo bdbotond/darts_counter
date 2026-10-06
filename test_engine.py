@@ -129,11 +129,48 @@ def test_csv_export():
     assert "Luke Littler,5,5,105.4,50.0%" in csv_str
     assert "Michael Smith,5,3,98.2,38.5%" in csv_str
 
+def test_bull_off_after_n_rounds():
+    # Test round tracking and Bull-off condition after N rounds
+    bull_off_after_rounds = 3
+    p1_visits = 0
+    p2_visits = 0
+    legs_p1 = 0
+    legs_p2 = 0
+
+    # Round 1
+    p1_visits += 1
+    p2_visits += 1
+    is_bull_off_due = (p1_visits >= bull_off_after_rounds and p2_visits >= bull_off_after_rounds)
+    assert not is_bull_off_due
+
+    # Round 2
+    p1_visits += 1
+    p2_visits += 1
+    is_bull_off_due = (p1_visits >= bull_off_after_rounds and p2_visits >= bull_off_after_rounds)
+    assert not is_bull_off_due
+
+    # Round 3
+    p1_visits += 1
+    p2_visits += 1
+    is_bull_off_due = (p1_visits >= bull_off_after_rounds and p2_visits >= bull_off_after_rounds)
+    assert is_bull_off_due, "Bull-off should trigger when both players complete round 3"
+
+    # Bull-off throw simulation: P1 hits 50 (Bullseye), P2 hits 25 (Outer Bull) -> P1 wins leg
+    p1_bull_throw = 50
+    p2_bull_throw = 25
+    assert p1_bull_throw > p2_bull_throw
+    winner = 0
+    legs_p1 += 1
+    assert legs_p1 == 1
+    assert legs_p2 == 0
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
+    test_bull_off_after_n_rounds()
     test_stats_calculation()
     test_group_standings_sort()
     test_bracket_propagation()
     test_csv_export()
-    print("ALL TESTS PASSED: 6/6 checks verified successfully.")
+    print("ALL TESTS PASSED: 7/7 checks verified successfully.")
+

@@ -17,7 +17,8 @@ export class Tournament {
       legsToWin: config.legsToWin || 3,
       maxLegs: config.maxLegs || 0,
       doubleOut: config.doubleOut !== false,
-      trackDoubles: config.trackDoubles !== false
+      trackDoubles: config.trackDoubles !== false,
+      bullOffAfterRounds: parseInt(config.bullOffAfterRounds, 10) || 0
     };
 
     this.groups = []; // [{ id: 'A', name: 'Group A', players: [], matches: [], standings: [] }]
