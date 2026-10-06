@@ -1046,10 +1046,40 @@
             <input type="number" id="tms-bull-off-rounds" class="form-control" value="15" min="3" max="50" style="width: 90px; display: inline-block;">
           </div>
         </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.25rem 0;">
+
+        <div style="background: var(--bg-card); border: 1px solid var(--border); padding: 1rem; border-radius: 8px;">
+          <div style="font-weight: 700; color: var(--accent-gold); margin-bottom: 0.75rem; font-size: 0.95rem;">
+            ⚡ Or Enter Result Manually
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label id="tms-manual-p1-label" for="tms-manual-legs-p1" style="font-size: 0.85rem;">Player 1 Legs:</label>
+              <input type="number" id="tms-manual-legs-p1" class="form-control" value="0" min="0" max="50">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label id="tms-manual-p2-label" for="tms-manual-legs-p2" style="font-size: 0.85rem;">Player 2 Legs:</label>
+              <input type="number" id="tms-manual-legs-p2" class="form-control" value="0" min="0" max="50">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0.75rem;">
+            <label for="tms-manual-winner" style="font-size: 0.85rem;">Match Winner:</label>
+            <select id="tms-manual-winner" class="form-control">
+              <option value="auto">Auto-detect from Legs</option>
+              <option value="p1" id="tms-opt-p1">Player 1</option>
+              <option value="p2" id="tms-opt-p2">Player 2</option>
+              <option value="draw" id="tms-opt-draw">Draw (Group Stage only)</option>
+            </select>
+          </div>
+          <button class="btn btn-gold btn-sm" id="btn-tms-save-manual" style="width: 100%;">
+            💾 Save Match Result Manually
+          </button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="btn-tms-cancel">Cancel</button>
-        <button class="btn btn-primary btn-lg" id="btn-tms-start">Start Match</button>
+        <button class="btn btn-primary btn-lg" id="btn-tms-start">Start Interactive Match</button>
       </div>
     </div>
   </div>
@@ -1108,7 +1138,10 @@
         <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
           <button class="btn btn-primary" id="btn-bo-award-p1">Award Leg to Player 1</button>
           <button class="btn btn-primary" id="btn-bo-award-p2">Award Leg to Player 2</button>
+          <button class="btn btn-gold" id="btn-bo-match-p1">🏆 Award Match to Player 1</button>
+          <button class="btn btn-gold" id="btn-bo-match-p2">🏆 Award Match to Player 2</button>
           <button class="btn btn-secondary" id="btn-bo-reset">Reset Throws</button>
+          <button class="btn btn-secondary" id="btn-bo-exit">Exit Match</button>
         </div>
       </div>
     </div>
@@ -2074,9 +2107,22 @@
       });
 
       document.getElementById("btn-exit-match").addEventListener("click", () => {
+        if (activeMatch && activeMatch.isFinished) {
+          if (currentTournamentMatch && activeTournament) {
+            renderTournamentDashboard();
+            showView("tourneyDash");
+          } else {
+            showView("home");
+          }
+          return;
+        }
         if (confirm("Exit current match?")) {
-          if (currentTournamentMatch && activeTournament) showView("tourneyDash");
-          else showView("home");
+          if (currentTournamentMatch && activeTournament) {
+            renderTournamentDashboard();
+            showView("tourneyDash");
+          } else {
+            showView("home");
+          }
         }
       });
 
@@ -2135,7 +2181,16 @@
         const logContainer = document.getElementById("scorer-visits-log");
         logContainer.innerHTML = "";
         activeMatch.history.slice(-8).reverse().forEach(action => {
+          if (action.type === "bull_off") {
+            const winnerName = action.winner === 0 ? activeMatch.player1 : activeMatch.player2;
+            const badge = document.createElement("div");
+            badge.className = "visit-badge";
+            badge.textContent = `🎯 Bull-off: ${winnerName} won ${action.matchWon ? "Match" : "Leg"}`;
+            logContainer.appendChild(badge);
+            return;
+          }
           const v = action.visit;
+          if (!v) return;
           const pName = v.playerIndex === 0 ? activeMatch.player1 : activeMatch.player2;
           const badge = document.createElement("div");
           badge.className = `visit-badge ${v.bust ? "bust" : ""}`;
@@ -2476,7 +2531,14 @@
                       ${m.isFinished ? `<div style="font-size:0.85rem; color:var(--accent-gold);">${m.legsP1} - ${m.legsP2} (${m.winner})</div>` : ""}
                     </div>
                     <div>
-                      ${!m.isFinished ? `<button class="btn btn-primary btn-sm btn-play-match" data-match-id="${m.id}">Play</button>` : `<span style="font-size:0.8rem; color:#238636;">✓ Done</span>`}
+                      ${!m.isFinished ? `
+                        <button class="btn btn-primary btn-sm btn-play-match" data-match-id="${m.id}">Play / Set Result</button>
+                      ` : `
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                          <span style="font-size:0.8rem; color:#238636;">✓ Done</span>
+                          <button class="btn btn-secondary btn-sm btn-play-match" data-match-id="${m.id}" style="font-size:0.75rem; padding:2px 8px;">Edit</button>
+                        </div>
+                      `}
                     </div>
                   </div>
                 `).join("")}
@@ -2559,6 +2621,62 @@
         });
       });
 
+      document.getElementById("btn-tms-save-manual").addEventListener("click", () => {
+        if (!pendingTournamentMatch || !activeTournament) return;
+        const match = pendingTournamentMatch;
+        const legsP1 = parseInt(document.getElementById("tms-manual-legs-p1").value, 10) || 0;
+        const legsP2 = parseInt(document.getElementById("tms-manual-legs-p2").value, 10) || 0;
+        const winnerOpt = document.getElementById("tms-manual-winner").value;
+
+        let winner = null;
+        if (winnerOpt === "p1") winner = match.player1;
+        else if (winnerOpt === "p2") winner = match.player2;
+        else if (winnerOpt === "draw") winner = "Draw";
+        else {
+          if (legsP1 > legsP2) winner = match.player1;
+          else if (legsP2 > legsP1) winner = match.player2;
+          else winner = (match.stage === "group" || !match.stage) ? "Draw" : match.player1;
+        }
+
+        const p1Stats = {
+          name: match.player1,
+          legsWon: legsP1,
+          legsLost: legsP2,
+          threeDartAvg: 0,
+          doubleAttempts: 0,
+          doubleHits: 0,
+          checkoutPct: 0,
+          highestCheckout: 0,
+          count180: 0, count140: 0, count100: 0, count60: 0,
+          totalDarts: 0, totalScore: 0
+        };
+
+        const p2Stats = {
+          name: match.player2,
+          legsWon: legsP2,
+          legsLost: legsP1,
+          threeDartAvg: 0,
+          doubleAttempts: 0,
+          doubleHits: 0,
+          checkoutPct: 0,
+          highestCheckout: 0,
+          count180: 0, count140: 0, count100: 0, count60: 0,
+          totalDarts: 0, totalScore: 0
+        };
+
+        activeTournament.recordMatchResult(match.id, {
+          winner,
+          legsP1,
+          legsP2,
+          p1Stats,
+          p2Stats
+        });
+
+        saveTournamentToStorage();
+        closeTournamentMatchSetup();
+        renderTournamentDashboard();
+      });
+
       function launchTournamentFixture(matchId) {
         let match = null;
         for (const g of activeTournament.groups) {
@@ -2587,6 +2705,22 @@
           tmsBullToggle.checked = hasBullOff;
           tmsBullConfig.style.display = hasBullOff ? "flex" : "none";
           document.getElementById("tms-bull-off-rounds").value = ms.bullOffAfterRounds || 15;
+        }
+
+        document.getElementById("tms-manual-p1-label").textContent = `${match.player1} Legs:`;
+        document.getElementById("tms-manual-p2-label").textContent = `${match.player2} Legs:`;
+        document.getElementById("tms-opt-p1").textContent = match.player1;
+        document.getElementById("tms-opt-p2").textContent = match.player2;
+        document.getElementById("tms-manual-legs-p1").value = match.isFinished ? match.legsP1 : 0;
+        document.getElementById("tms-manual-legs-p2").value = match.isFinished ? match.legsP2 : 0;
+        if (match.isFinished) {
+          document.getElementById("tms-manual-winner").value = (match.winner === match.player1 ? "p1" : (match.winner === match.player2 ? "p2" : (match.winner === "Draw" ? "draw" : "auto")));
+        } else {
+          document.getElementById("tms-manual-winner").value = "auto";
+        }
+        const optDraw = document.getElementById("tms-opt-draw");
+        if (optDraw) {
+          optDraw.style.display = (match.stage === "group" || !match.stage) ? "block" : "none";
         }
 
         document.getElementById("modal-tourney-match-setup").style.display = "flex";
@@ -2622,9 +2756,11 @@
               <div class="bracket-slot ${s2Win ? "winner" : ""}">
                 <span>${m.player2 || "TBD"}</span><span>${m.isFinished ? m.legsP2 : "-"}</span>
               </div>
-              ${(!m.isFinished && m.player1 && m.player2 && m.player1 !== "BYE" && m.player2 !== "BYE") ? `
+              ${(m.player1 && m.player2 && m.player1 !== "BYE" && m.player2 !== "BYE") ? `
                 <div style="padding: 4px; text-align: center; background: var(--bg-card); border-top: 1px solid var(--border);">
-                  <button class="btn btn-primary btn-sm btn-play-match" data-match-id="${m.id}" style="width:100%; font-size:0.75rem; padding:2px 6px;">Play Match</button>
+                  <button class="btn ${m.isFinished ? "btn-secondary" : "btn-primary"} btn-sm btn-play-match" data-match-id="${m.id}" style="width:100%; font-size:0.75rem; padding:2px 6px;">
+                    ${m.isFinished ? "Edit Result" : "Play / Set Result"}
+                  </button>
                 </div>
               ` : ""}
             `;
@@ -2700,8 +2836,6 @@
       // --- Bull-off Modal Handlers ---
       let boThrows = { p1: null, p2: null };
 
-      let bullOffDecidingMatch = false;
-
       function openBullOffModal() {
         if (!activeMatch) return;
         const modal = document.getElementById("modal-bull-off");
@@ -2709,19 +2843,24 @@
         document.getElementById("bo-p1-name").textContent = activeMatch.player1;
         document.getElementById("bo-p2-name").textContent = activeMatch.player2;
 
-        bullOffDecidingMatch = (activeMatch.legsP1 + 1 >= activeMatch.legsToWin) ||
-                               (activeMatch.legsP2 + 1 >= activeMatch.legsToWin) ||
-                               (activeMatch.legsToWin === 1);
+        const isDecidingP1 = (activeMatch.legsP1 + 1 >= activeMatch.legsToWin) || (activeMatch.legsToWin === 1);
+        const isDecidingP2 = (activeMatch.legsP2 + 1 >= activeMatch.legsToWin) || (activeMatch.legsToWin === 1);
 
         const btnP1 = document.getElementById("btn-bo-award-p1");
         const btnP2 = document.getElementById("btn-bo-award-p2");
-        if (bullOffDecidingMatch) {
-          btnP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
-          btnP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
-        } else {
-          btnP1.textContent = `Award Leg to ${activeMatch.player1}`;
-          btnP2.textContent = `Award Leg to ${activeMatch.player2}`;
-        }
+        const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+        const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+
+        btnP1.textContent = `Award Leg to ${activeMatch.player1}`;
+        btnP2.textContent = `Award Leg to ${activeMatch.player2}`;
+        btnMatchP1.textContent = `🏆 Award Match to ${activeMatch.player1}`;
+        btnMatchP2.textContent = `🏆 Award Match to ${activeMatch.player2}`;
+
+        btnP1.style.display = isDecidingP1 ? "none" : "inline-flex";
+        btnMatchP1.style.display = "inline-flex";
+
+        btnP2.style.display = isDecidingP2 ? "none" : "inline-flex";
+        btnMatchP2.style.display = "inline-flex";
 
         resetBullOffThrows();
         modal.style.display = "flex";
@@ -2733,6 +2872,13 @@
         document.getElementById("bo-p2-val").textContent = "-";
         document.getElementById("bo-status-msg").textContent = "Record each player's throw at the Bull:";
         document.querySelectorAll(".bo-p1-btn, .bo-p2-btn").forEach(b => b.classList.remove("selected", "btn-gold"));
+        const btnP1 = document.getElementById("btn-bo-award-p1");
+        const btnP2 = document.getElementById("btn-bo-award-p2");
+        const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+        const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+        [btnP1, btnP2, btnMatchP1, btnMatchP2].forEach(b => {
+          if (b) b.classList.remove("btn-gold");
+        });
       }
 
       document.querySelectorAll(".bo-p1-btn").forEach(btn => {
@@ -2759,23 +2905,53 @@
 
       function evaluateBullOff() {
         const msg = document.getElementById("bo-status-msg");
+        const btnP1 = document.getElementById("btn-bo-award-p1");
+        const btnP2 = document.getElementById("btn-bo-award-p2");
+        const btnMatchP1 = document.getElementById("btn-bo-match-p1");
+        const btnMatchP2 = document.getElementById("btn-bo-match-p2");
+
+        [btnP1, btnP2, btnMatchP1, btnMatchP2].forEach(b => {
+          if (b) b.classList.remove("btn-gold");
+        });
+
         if (boThrows.p1 === null || boThrows.p2 === null) {
           msg.textContent = "Throw for both players to determine result:";
           return;
         }
         if (boThrows.p1 > boThrows.p2) {
           msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${activeMatch.player1}</strong> won the Bull-off!`;
+          if (btnP1) btnP1.classList.add("btn-gold");
+          if (btnMatchP1) btnMatchP1.classList.add("btn-gold");
         } else if (boThrows.p2 > boThrows.p1) {
           msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${activeMatch.player2}</strong> won the Bull-off!`;
+          if (btnP2) btnP2.classList.add("btn-gold");
+          if (btnMatchP2) btnMatchP2.classList.add("btn-gold");
         } else {
           msg.innerHTML = `⚖️ <strong>Tie (${boThrows.p1} pts each)!</strong> Re-throw, or pick who was closer.`;
         }
       }
 
-      document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0, bullOffDecidingMatch));
-      document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1, bullOffDecidingMatch));
+      document.getElementById("btn-bo-award-p1").addEventListener("click", () => resolveBullOffWinner(0, false));
+      document.getElementById("btn-bo-award-p2").addEventListener("click", () => resolveBullOffWinner(1, false));
+      document.getElementById("btn-bo-match-p1").addEventListener("click", () => resolveBullOffWinner(0, true));
+      document.getElementById("btn-bo-match-p2").addEventListener("click", () => resolveBullOffWinner(1, true));
 
       document.getElementById("btn-bo-reset").addEventListener("click", resetBullOffThrows);
+
+      const btnBoExit = document.getElementById("btn-bo-exit");
+      if (btnBoExit) {
+        btnBoExit.addEventListener("click", () => {
+          if (confirm("Exit current match?")) {
+            document.getElementById("modal-bull-off").style.display = "none";
+            if (currentTournamentMatch && activeTournament) {
+              renderTournamentDashboard();
+              showView("tourneyDash");
+            } else {
+              showView("home");
+            }
+          }
+        });
+      }
 
       function resolveBullOffWinner(winnerIndex, decideEntireMatch = false) {
         if (!activeMatch) return;
