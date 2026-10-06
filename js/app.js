@@ -689,6 +689,61 @@ document.getElementById("btn-advance-to-knockout").addEventListener("click", () 
   renderTournamentDashboard();
 });
 
+let pendingTournamentMatch = null;
+
+const tmsBullToggle = document.getElementById("tms-bull-off-toggle");
+const tmsBullConfig = document.getElementById("tms-bull-off-config");
+if (tmsBullToggle && tmsBullConfig) {
+  tmsBullToggle.addEventListener("change", (e) => {
+    tmsBullConfig.style.display = e.target.checked ? "flex" : "none";
+  });
+}
+
+function closeTournamentMatchSetup() {
+  const modal = document.getElementById("modal-tourney-match-setup");
+  if (modal) modal.style.display = "none";
+  pendingTournamentMatch = null;
+}
+
+const btnTmsClose = document.getElementById("btn-tms-close");
+if (btnTmsClose) btnTmsClose.addEventListener("click", closeTournamentMatchSetup);
+
+const btnTmsCancel = document.getElementById("btn-tms-cancel");
+if (btnTmsCancel) btnTmsCancel.addEventListener("click", closeTournamentMatchSetup);
+
+const btnTmsStart = document.getElementById("btn-tms-start");
+if (btnTmsStart) {
+  btnTmsStart.addEventListener("click", () => {
+    if (!pendingTournamentMatch) return;
+    const match = pendingTournamentMatch;
+    currentTournamentMatch = match;
+
+    const startingScore = parseInt(document.getElementById("tms-game-type").value, 10) || 501;
+    const legsToWin = parseInt(document.getElementById("tms-legs-to-win").value, 10) || 2;
+    const doubleOut = document.getElementById("tms-out-mode").value === "double";
+    const trackDoubles = document.getElementById("tms-track-doubles").checked;
+    const bullOff = tmsBullToggle && tmsBullToggle.checked;
+    const bullOffAfterRounds = bullOff ? (parseInt(document.getElementById("tms-bull-off-rounds").value, 10) || 15) : 0;
+
+    const modal = document.getElementById("modal-tourney-match-setup");
+    if (modal) modal.style.display = "none";
+
+    const badge = document.getElementById("tournament-context-badge");
+    badge.textContent = `Tournament: ${match.player1} vs ${match.player2}`;
+    badge.style.display = "inline-flex";
+
+    startMatch({
+      player1: match.player1,
+      player2: match.player2,
+      startingScore,
+      legsToWin,
+      doubleOut,
+      trackDoubles,
+      bullOffAfterRounds
+    });
+  });
+}
+
 function launchTournamentFixture(matchId) {
   let foundMatch = null;
   for (const g of activeTournament.groups) {
@@ -703,20 +758,34 @@ function launchTournamentFixture(matchId) {
   }
   if (!foundMatch) return;
 
-  currentTournamentMatch = foundMatch;
-  const badge = document.getElementById("tournament-context-badge");
-  badge.textContent = `Tournament: ${foundMatch.player1} vs ${foundMatch.player2}`;
-  badge.style.display = "inline-flex";
+  pendingTournamentMatch = foundMatch;
+  const ms = activeTournament.matchSettings || {};
 
-  startMatch({
-    player1: foundMatch.player1,
-    player2: foundMatch.player2,
-    startingScore: activeTournament.matchSettings.startingScore,
-    legsToWin: activeTournament.matchSettings.legsToWin,
-    doubleOut: activeTournament.matchSettings.doubleOut,
-    trackDoubles: activeTournament.matchSettings.trackDoubles,
-    bullOffAfterRounds: activeTournament.matchSettings.bullOffAfterRounds
-  });
+  const pEl = document.getElementById("tms-players");
+  if (pEl) pEl.textContent = `${foundMatch.player1} vs ${foundMatch.player2}`;
+
+  const gEl = document.getElementById("tms-game-type");
+  if (gEl) gEl.value = `${ms.startingScore || 501}`;
+
+  const lEl = document.getElementById("tms-legs-to-win");
+  if (lEl) lEl.value = ms.legsToWin || 2;
+
+  const oEl = document.getElementById("tms-out-mode");
+  if (oEl) oEl.value = ms.doubleOut !== false ? "double" : "single";
+
+  const tEl = document.getElementById("tms-track-doubles");
+  if (tEl) tEl.checked = ms.trackDoubles !== false;
+
+  const hasBullOff = (ms.bullOffAfterRounds || 0) > 0;
+  if (tmsBullToggle) {
+    tmsBullToggle.checked = hasBullOff;
+    if (tmsBullConfig) tmsBullConfig.style.display = hasBullOff ? "flex" : "none";
+    const rEl = document.getElementById("tms-bull-off-rounds");
+    if (rEl) rEl.value = ms.bullOffAfterRounds || 15;
+  }
+
+  const modal = document.getElementById("modal-tourney-match-setup");
+  if (modal) modal.style.display = "flex";
 }
 
 function renderBracketTree() {

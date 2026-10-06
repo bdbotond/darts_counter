@@ -993,6 +993,67 @@
     </div>
   </div>
 
+  <!-- MODAL: Tournament Match Setup / Modify Rules -->
+  <div id="modal-tourney-match-setup" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <div>
+          <h3 id="tms-title">🎯 Tournament Match Setup</h3>
+          <div id="tms-players" style="color: var(--accent-gold); font-size: 1.15rem; font-weight: 700; margin-top: 3px;">Player 1 vs Player 2</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-tms-close">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Confirm or modify game rules for this specific match before playing:
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tms-game-type">Game</label>
+            <select id="tms-game-type" class="form-control">
+              <option value="501">501</option>
+              <option value="301">301</option>
+              <option value="701">701</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="tms-legs-to-win">Legs to Win</label>
+            <input type="number" id="tms-legs-to-win" class="form-control" value="2" min="1" max="21">
+          </div>
+          <div class="form-group">
+            <label for="tms-out-mode">Finish Rule</label>
+            <select id="tms-out-mode" class="form-control">
+              <option value="double">Double Out</option>
+              <option value="single">Single Out</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.5rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="tms-track-doubles" checked style="width: 18px; height: 18px;">
+            <span>Track Darts at Double & Checkout %</span>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.5rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="tms-bull-off-toggle" style="width: 18px; height: 18px;">
+            <span>Decide leg with Bull throw if no finish after N rounds</span>
+          </label>
+          <div id="tms-bull-off-config" style="display: none; margin-top: 0.5rem; margin-left: 1.6rem; align-items: center; gap: 0.5rem;">
+            <label for="tms-bull-off-rounds" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0;">Number of rounds before Bull-off:</label>
+            <input type="number" id="tms-bull-off-rounds" class="form-control" value="15" min="3" max="50" style="width: 90px; display: inline-block;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-tms-cancel">Cancel</button>
+        <button class="btn btn-primary btn-lg" id="btn-tms-start">Start Match</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-match-finish" class="modal-overlay" style="display: none;">
     <div class="modal-content" style="max-width: 500px; text-align: center;">
       <div class="modal-body" style="padding: 2rem;">
@@ -2449,6 +2510,53 @@
         renderTournamentDashboard();
       });
 
+      let pendingTournamentMatch = null;
+
+      const tmsBullToggle = document.getElementById("tms-bull-off-toggle");
+      const tmsBullConfig = document.getElementById("tms-bull-off-config");
+      if (tmsBullToggle && tmsBullConfig) {
+        tmsBullToggle.addEventListener("change", (e) => {
+          tmsBullConfig.style.display = e.target.checked ? "flex" : "none";
+        });
+      }
+
+      function closeTournamentMatchSetup() {
+        document.getElementById("modal-tourney-match-setup").style.display = "none";
+        pendingTournamentMatch = null;
+      }
+
+      document.getElementById("btn-tms-close").addEventListener("click", closeTournamentMatchSetup);
+      document.getElementById("btn-tms-cancel").addEventListener("click", closeTournamentMatchSetup);
+
+      document.getElementById("btn-tms-start").addEventListener("click", () => {
+        if (!pendingTournamentMatch) return;
+        const match = pendingTournamentMatch;
+        currentTournamentMatch = match;
+
+        const startingScore = parseInt(document.getElementById("tms-game-type").value, 10) || 501;
+        const legsToWin = parseInt(document.getElementById("tms-legs-to-win").value, 10) || 2;
+        const doubleOut = document.getElementById("tms-out-mode").value === "double";
+        const trackDoubles = document.getElementById("tms-track-doubles").checked;
+        const bullOff = tmsBullToggle && tmsBullToggle.checked;
+        const bullOffAfterRounds = bullOff ? (parseInt(document.getElementById("tms-bull-off-rounds").value, 10) || 15) : 0;
+
+        document.getElementById("modal-tourney-match-setup").style.display = "none";
+
+        const badge = document.getElementById("tournament-context-badge");
+        badge.textContent = `Tournament: ${match.player1} vs ${match.player2}`;
+        badge.style.display = "inline-flex";
+
+        startMatch({
+          player1: match.player1,
+          player2: match.player2,
+          startingScore,
+          legsToWin,
+          doubleOut,
+          trackDoubles,
+          bullOffAfterRounds
+        });
+      });
+
       function launchTournamentFixture(matchId) {
         let match = null;
         for (const g of activeTournament.groups) {
@@ -2463,20 +2571,23 @@
         }
         if (!match) return;
 
-        currentTournamentMatch = match;
-        const badge = document.getElementById("tournament-context-badge");
-        badge.textContent = `Tournament: ${match.player1} vs ${match.player2}`;
-        badge.style.display = "inline-flex";
+        pendingTournamentMatch = match;
+        const ms = activeTournament.matchSettings || {};
 
-        startMatch({
-          player1: match.player1,
-          player2: match.player2,
-          startingScore: activeTournament.matchSettings.startingScore,
-          legsToWin: activeTournament.matchSettings.legsToWin,
-          doubleOut: activeTournament.matchSettings.doubleOut,
-          trackDoubles: activeTournament.matchSettings.trackDoubles,
-          bullOffAfterRounds: activeTournament.matchSettings.bullOffAfterRounds
-        });
+        document.getElementById("tms-players").textContent = `${match.player1} vs ${match.player2}`;
+        document.getElementById("tms-game-type").value = `${ms.startingScore || 501}`;
+        document.getElementById("tms-legs-to-win").value = ms.legsToWin || 2;
+        document.getElementById("tms-out-mode").value = ms.doubleOut !== false ? "double" : "single";
+        document.getElementById("tms-track-doubles").checked = ms.trackDoubles !== false;
+
+        const hasBullOff = (ms.bullOffAfterRounds || 0) > 0;
+        if (tmsBullToggle) {
+          tmsBullToggle.checked = hasBullOff;
+          tmsBullConfig.style.display = hasBullOff ? "flex" : "none";
+          document.getElementById("tms-bull-off-rounds").value = ms.bullOffAfterRounds || 15;
+        }
+
+        document.getElementById("modal-tourney-match-setup").style.display = "flex";
       }
 
       function renderBracketTree() {
