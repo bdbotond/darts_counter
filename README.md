@@ -38,7 +38,4 @@ Works anywhere: locally, offline, and hosted directly via **GitHub Pages**.
    `https://YOUR_USERNAME.github.io/darts-counter/`
 
 ## Local Usage
-Simply double-click `index.html` in your browser, or run:
-```bash
-./run.sh
-```
+Simply double-click `index.html` in your browser. No server required.
