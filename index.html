@@ -1865,25 +1865,16 @@
       }
     }
 
-    // --- 4. REALTIME SYNC (BroadcastChannel + LocalStorage) ---
+    // --- 4. REALTIME SYNC (BroadcastChannel) ---
     const SYNC_CHANNEL = "darts_scoreboard_channel";
-    const SYNC_STORAGE = "darts_scoreboard_state";
 
     class SyncHub {
       constructor(isHost) {
         this.isHost = isHost;
         this.listeners = [];
-        if ("BroadcastChannel" in window) {
-          try {
-            this.bc = new BroadcastChannel(SYNC_CHANNEL);
-            this.bc.onmessage = (e) => this.receive(e.data);
-          } catch (e) {}
-        }
-        window.addEventListener("storage", (e) => {
-          if (e.key === SYNC_STORAGE && e.newValue) {
-            try { this.receive(JSON.parse(e.newValue)); } catch (err) {}
-          }
-        });
+        this.latest = null;
+        this.bc = new BroadcastChannel(SYNC_CHANNEL);
+        this.bc.onmessage = (e) => this.receive(e.data);
       }
 
       receive(msg) {
@@ -1897,25 +1888,11 @@
 
       broadcast(state) {
         this.latest = state;
-        const msg = { type: "GAME_STATE", payload: state, time: Date.now() };
-        if (this.bc) {
-          try { this.bc.postMessage(msg); } catch (e) {}
-        }
-        try { localStorage.setItem(SYNC_STORAGE, JSON.stringify(msg)); } catch (e) {}
+        try { this.bc.postMessage({ type: "GAME_STATE", payload: state }); } catch (e) {}
       }
 
       request() {
-        const msg = { type: "REQUEST_STATE", time: Date.now() };
-        if (this.bc) {
-          try { this.bc.postMessage(msg); } catch (e) {}
-        }
-        const cached = localStorage.getItem(SYNC_STORAGE);
-        if (cached) {
-          try {
-            const data = JSON.parse(cached);
-            if (data && data.payload) this.listeners.forEach(fn => fn(data.payload));
-          } catch (e) {}
-        }
+        try { this.bc.postMessage({ type: "REQUEST_STATE" }); } catch (e) {}
       }
 
       onState(fn) {
@@ -1923,7 +1900,7 @@
       }
     }
 
-    // --- 5. INITIALIZATION & ROUTING ---
+        // --- 5. INITIALIZATION & ROUTING ---
     const isSpectatorMode = window.location.search.includes("screen=display") || window.location.hash === "#display";
 
     if (isSpectatorMode) {
