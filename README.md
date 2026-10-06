@@ -39,3 +39,4 @@ Works anywhere: locally, offline, and hosted directly via **GitHub Pages**.
 
 ## Local Usage
 Simply double-click `index.html` in your browser. No server required.
+# darts_counter
