@@ -48,11 +48,11 @@ class DartsMatch {
         return getCheckout(score, this.doubleOut);
       }
 
-      recordVisit({ score, dartsCount = 3, doubleAttempts = 0, dartBreakdown = null }) {
+      recordVisit({ score, dartsCount = 3, doubleAttempts = 0, dartBreakdown = null, bust = false }) {
         if (this.isFinished) return;
         const pIdx = this.currentTurn;
         const currentScore = this.currentLeg.scores[pIdx];
-        let isBust = false;
+        let isBust = Boolean(bust);
         let isWon = false;
         let actualDoubleAttempts = Number(doubleAttempts) || 0;
         let actualDoubleHit = 0;
@@ -114,34 +114,40 @@ class DartsMatch {
           }
         } else {
           // Numeric visit input
-          const remaining = currentScore - score;
+          if (isBust) {
+            finalScoreLeft = currentScore;
+            visitScore = 0;
+          } else {
+            const remaining = currentScore - score;
 
-          if (this.doubleOut) {
-            if (remaining < 0 || remaining === 1) {
-              isBust = true;
-            } else if (remaining === 0) {
-              // Valid checkout must be in CHECKOUT_TABLE (<=170 and not a bogey number)
-              if (CHECKOUT_TABLE[currentScore]) {
-                isWon = true;
-                actualDoubleHit = 1;
-                if (actualDoubleAttempts === 0) actualDoubleAttempts = 1;
-              } else {
-                // Impossible checkout from 180, 169, 168, etc. -> BUST
+            if (this.doubleOut) {
+              if (remaining < 0 || remaining === 1) {
                 isBust = true;
+              } else if (remaining === 0) {
+                // Valid checkout must be in CHECKOUT_TABLE (<=170 and not a bogey number)
+                if (CHECKOUT_TABLE[currentScore]) {
+                  isWon = true;
+                  actualDoubleHit = 1;
+                  if (actualDoubleAttempts === 0) actualDoubleAttempts = 1;
+                } else {
+                  // Impossible checkout from 180, 169, 168, etc. -> BUST
+                  isBust = true;
+                }
+              }
+            } else {
+              if (remaining < 0) {
+                isBust = true;
+              } else if (remaining === 0) {
+                isWon = true;
               }
             }
-          } else {
-            if (remaining < 0) {
-              isBust = true;
-            } else if (remaining === 0) {
-              isWon = true;
-            }
-          }
 
-          finalScoreLeft = isBust ? currentScore : remaining;
-          visitScore = isBust ? 0 : score;
+            finalScoreLeft = isBust ? currentScore : remaining;
+            visitScore = isBust ? 0 : score;
+          }
         }
 
+        actualDoubleAttempts = Math.max(actualDoubleAttempts, actualDoubleHit);
         this.currentLeg.scores[pIdx] = finalScoreLeft;
 
         const visitRecord = {
@@ -165,7 +171,8 @@ class DartsMatch {
           turn: pIdx,
           visit: visitRecord,
           legWon: isWon,
-          matchWon: false
+          matchWon: false,
+          prevLegs: [this.legsP1, this.legsP2]
         };
 
         if (isWon) {
@@ -207,6 +214,7 @@ class DartsMatch {
         if (this.isFinished) return false;
         this.currentLeg.winner = winnerIndex;
         this.currentLeg.decidedBy = "bull_off";
+        const prevLegs = [this.legsP1, this.legsP2];
 
         if (decideEntireMatch) {
           if (winnerIndex === 0) {
@@ -224,7 +232,8 @@ class DartsMatch {
             turn: winnerIndex,
             winner: winnerIndex,
             legWon: true,
-            matchWon: true
+            matchWon: true,
+            prevLegs
           });
           return { success: true, isFinished: true, winner: this.winner };
         }
@@ -244,7 +253,8 @@ class DartsMatch {
           turn: winnerIndex,
           winner: winnerIndex,
           legWon: true,
-          matchWon: false
+          matchWon: false,
+          prevLegs
         };
 
         if (wonByLegs || reachedMaxLegs) {
@@ -276,8 +286,13 @@ class DartsMatch {
 
         if (lastAction.type === "bull_off") {
           const restoredLeg = this.legs.pop();
-          if (lastAction.winner === 0) this.legsP1--;
-          else this.legsP2--;
+          if (lastAction.prevLegs) {
+            this.legsP1 = lastAction.prevLegs[0];
+            this.legsP2 = lastAction.prevLegs[1];
+          } else {
+            if (lastAction.winner === 0) this.legsP1--;
+            else this.legsP2--;
+          }
 
           this.currentLegIndex = restoredLeg.legIndex;
           this.currentLeg = restoredLeg;
@@ -291,8 +306,13 @@ class DartsMatch {
 
         if (lastAction.legWon) {
           const restoredLeg = this.legs.pop();
-          if (lastAction.turn === 0) this.legsP1--;
-          else this.legsP2--;
+          if (lastAction.prevLegs) {
+            this.legsP1 = lastAction.prevLegs[0];
+            this.legsP2 = lastAction.prevLegs[1];
+          } else {
+            if (lastAction.turn === 0) this.legsP1--;
+            else this.legsP2--;
+          }
 
           this.currentLegIndex = restoredLeg.legIndex;
           this.currentLeg = restoredLeg;

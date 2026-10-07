@@ -17,6 +17,12 @@ window.App = {
     else if (viewName === "matchSetup" || viewName === "scorer") App.navBtns.quickMatch.classList.add("active");
     else if (viewName === "tourneySetup" || viewName === "tourneyDash") App.navBtns.tournament.classList.add("active");
 
+    if (viewName === "tourneyDash" && App.activeTournament && App.renderTournamentDashboard) {
+      App.renderTournamentDashboard();
+    } else if (viewName === "scorer" && App.activeMatch && App.renderScorer) {
+      App.renderScorer();
+    }
+
     if (App.activeTournament && (viewName === "tourneyDash" || viewName === "scorer")) {
       App.navBtns.midStats.style.display = "inline-flex";
     } else {

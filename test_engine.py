@@ -377,6 +377,155 @@ def test_repechage_and_bronze_tournament_engine():
     res = subprocess.run(["node", "-e", node_test_script], capture_output=True, text=True)
     assert res.returncode == 0, f"Repechage & Bronze test failed: {res.stderr}"
 
+def test_universal_repechage_even_odd_players():
+    import subprocess
+    node_test_script = """
+    const fs = require('fs');
+    const window = {};
+    eval(fs.readFileSync('js/engine/tournament.js', 'utf8'));
+    const Tournament = window.Tournament;
+
+    function simulateTournament(n, seedBracket) {
+      const players = Array.from({ length: n }, (_, i) => 'Player_' + (i + 1));
+      const t = new Tournament({
+        name: `Rep Test N=${n} Seed=${seedBracket}`,
+        format: 'direct_knockout',
+        players: players,
+        repechageConfig: { enabled: true, fromRound: 0, toRound: 0, reEntryRound: 1 },
+        enableBronzeMatch: true,
+        legsToWin: 2,
+        seedBracket: seedBracket
+      });
+      t.start();
+
+      let maxLoops = 200;
+      let loops = 0;
+      while (t.status !== 'finished' && loops < maxLoops) {
+        loops++;
+        let playedAny = false;
+        const allMatches = [
+          ...t.knockoutRounds.flat(),
+          ...t.repechageRounds.flat(),
+          ...(t.bronzeMatch ? [t.bronzeMatch] : [])
+        ];
+
+        for (const m of allMatches) {
+          if (!m.isFinished && m.player1 && m.player2 && m.player1 !== 'BYE' && m.player2 !== 'BYE') {
+            t.recordMatchResult(m.id, {
+              winner: m.player1,
+              legsP1: 2,
+              legsP2: 0,
+              p1Stats: { name: m.player1 },
+              p2Stats: { name: m.player2 }
+            });
+            playedAny = true;
+            break;
+          }
+        }
+        if (!playedAny) break;
+      }
+
+      if (t.status !== 'finished') {
+        const unplayed = [
+          ...t.knockoutRounds.flat(),
+          ...t.repechageRounds.flat(),
+          ...(t.bronzeMatch ? [t.bronzeMatch] : [])
+        ].filter(m => !m.isFinished);
+        throw new Error(`Tournament N=${n} (seeded=${seedBracket}) failed to finish. Unplayed: ${JSON.stringify(unplayed.map(m => m.id))}`);
+      }
+
+      const finalMatch = t.knockoutRounds[t.knockoutRounds.length - 1][0];
+      if (!finalMatch.isFinished || !finalMatch.winner || finalMatch.winner === 'BYE') {
+        throw new Error(`Tournament N=${n} (seeded=${seedBracket}) invalid winner: ${finalMatch.winner}`);
+      }
+      if (t.enableBronzeMatch && (!t.bronzeMatch || !t.bronzeMatch.isFinished || !t.bronzeMatch.winner || t.bronzeMatch.winner === 'BYE')) {
+        throw new Error(`Tournament N=${n} (seeded=${seedBracket}) invalid bronze winner`);
+      }
+    }
+
+    // Verify both even and odd player counts across sizes 4, 8, and 16
+    const testCounts = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    for (const count of testCounts) {
+      simulateTournament(count, true);
+      simulateTournament(count, false);
+    }
+    """
+    res = subprocess.run(["node", "-e", node_test_script], capture_output=True, text=True)
+    assert res.returncode == 0, f"Universal repechage even/odd test failed: {res.stderr}"
+
+def test_audit_fixes_match_and_tournament():
+    import subprocess
+    node_test_script = """
+    const fs = require('fs');
+    const window = {};
+    eval(fs.readFileSync('js/engine/checkouts.js', 'utf8'));
+    eval(fs.readFileSync('js/engine/match.js', 'utf8'));
+    eval(fs.readFileSync('js/engine/tournament.js', 'utf8'));
+
+    // 1. Test bust visit handling
+    const m = new window.DartsMatch({ startingScore: 501, legsToWin: 3 });
+    m.recordVisit({ score: 0, dartsCount: 3, doubleAttempts: 0, bust: true });
+    if (!m.currentLeg.visits[0][0].bust) throw new Error('Bust visit flag not set');
+    if (m.currentLeg.scores[0] !== 501) throw new Error('Bust score not retained');
+
+    // 2. Test bull-off sudden death undo exact legs
+    const m2 = new window.DartsMatch({ startingScore: 501, legsToWin: 3 });
+    m2.resolveBullOff(0, true);
+    if (m2.legsP1 !== 3 || !m2.isFinished) throw new Error('Bull-off decideEntireMatch failed');
+    m2.undo();
+    if (m2.legsP1 !== 0 || m2.isFinished) throw new Error(`Undo did not restore legs: legsP1=${m2.legsP1}`);
+
+    // 3. Test group crossover pairing with seedBracket: true
+    const t = new window.Tournament({
+      name: 'Group Crossover Test',
+      format: 'groups',
+      players: ['P1', 'P2', 'P3', 'P4'],
+      groupCount: 2,
+      advancePerGroup: 2,
+      seedBracket: true
+    });
+    t.start();
+    t.groups[0].standings = [{ player: 'A1_winner', legDiff: 2 }, { player: 'A2_runnerup', legDiff: 1 }];
+    t.groups[1].standings = [{ player: 'B1_winner', legDiff: 2 }, { player: 'B2_runnerup', legDiff: 1 }];
+    t.advanceFromGroupsToKnockout();
+
+    const mR1_1 = t.knockoutRounds[0][0];
+    const mR1_2 = t.knockoutRounds[0][1];
+    if (mR1_1.player1 !== 'A1_winner' || mR1_1.player2 !== 'B2_runnerup') {
+      throw new Error(`Group crossover M1 failed: ${mR1_1.player1} vs ${mR1_1.player2}`);
+    }
+    if (mR1_2.player1 !== 'B1_winner' || mR1_2.player2 !== 'A2_runnerup') {
+      throw new Error(`Group crossover M2 failed: ${mR1_2.player1} vs ${mR1_2.player2}`);
+    }
+
+    // 4. Test downstream match reset on replay
+    const t2 = new window.Tournament({
+      name: 'Replay Downstream Reset',
+      format: 'direct_knockout',
+      players: ['P1', 'P2', 'P3', 'P4'],
+      legsToWin: 2,
+      seedBracket: false
+    });
+    t2.start();
+    t2.recordMatchResult('ko_r1_m1', { winner: 'P1', legsP1: 2, legsP2: 0 });
+    t2.recordMatchResult('ko_r1_m2', { winner: 'P3', legsP1: 2, legsP2: 0 });
+    t2.recordMatchResult('ko_r2_m1', { winner: 'P1', legsP1: 2, legsP2: 0 });
+
+    // Modify M1: P2 won instead of P1
+    t2.recordMatchResult('ko_r1_m1', { winner: 'P2', legsP1: 0, legsP2: 2 });
+    const finalM = t2.knockoutRounds[1][0];
+    if (finalM.player1 !== 'P2') throw new Error(`Final player1 not updated to P2: ${finalM.player1}`);
+    if (finalM.isFinished) throw new Error('Downstream final match not reset after player changed');
+    if (finalM.winner !== null) throw new Error(`Downstream final winner not reset: ${finalM.winner}`);
+
+    // 5. Test diff and legDiff in standings
+    const g = { players: ['X', 'Y'], matches: [{ player1: 'X', player2: 'Y', legsP1: 2, legsP2: 1, winner: 'X', isFinished: true }] };
+    t.updateGroupStandings(g);
+    if (g.standings[0].legDiff !== 1 || g.standings[0].diff !== 1) throw new Error('Standings diff/legDiff mismatch');
+    """
+    res = subprocess.run(["node", "-e", node_test_script], capture_output=True, text=True)
+    assert res.returncode == 0, f"Audit fixes test failed: {res.stderr}"
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
@@ -391,7 +540,11 @@ if __name__ == "__main__":
     test_bracket_propagation()
     test_csv_export()
     test_repechage_and_bronze_tournament_engine()
-    print("ALL TESTS PASSED: 13/13 checks verified successfully.")
+    test_universal_repechage_even_odd_players()
+    test_audit_fixes_match_and_tournament()
+    print("ALL TESTS PASSED: 15/15 checks verified successfully.")
+
+
 
 
 

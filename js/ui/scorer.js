@@ -107,6 +107,9 @@ App.initScorerUI = function() {
         p2Stats: App.activeMatch.getPlayerStats(1)
       });
       App.saveTournamentToStorage();
+      App.currentTournamentMatch = null;
+      const badge = document.getElementById("tournament-context-badge");
+      if (badge) badge.style.display = "none";
       App.renderTournamentDashboard();
       App.showView("tourneyDash");
     } else {
@@ -129,6 +132,19 @@ App.initScorerUI = function() {
   document.getElementById("btn-exit-match").addEventListener("click", () => {
     if (App.activeMatch && App.activeMatch.isFinished) {
       if (App.currentTournamentMatch && App.activeTournament) {
+        if (!App.activeTournament.matchStatsRegistry[App.currentTournamentMatch.id]) {
+          App.activeTournament.recordMatchResult(App.currentTournamentMatch.id, {
+            winner: App.activeMatch.winner,
+            legsP1: App.activeMatch.legsP1,
+            legsP2: App.activeMatch.legsP2,
+            p1Stats: App.activeMatch.getPlayerStats(0),
+            p2Stats: App.activeMatch.getPlayerStats(1)
+          });
+          App.saveTournamentToStorage();
+        }
+        App.currentTournamentMatch = null;
+        const badge = document.getElementById("tournament-context-badge");
+        if (badge) badge.style.display = "none";
         App.renderTournamentDashboard();
         App.showView("tourneyDash");
       } else {
@@ -138,6 +154,9 @@ App.initScorerUI = function() {
     }
     if (confirm("Exit current match?")) {
       if (App.currentTournamentMatch && App.activeTournament) {
+        App.currentTournamentMatch = null;
+        const badge = document.getElementById("tournament-context-badge");
+        if (badge) badge.style.display = "none";
         App.renderTournamentDashboard();
         App.showView("tourneyDash");
       } else {
@@ -147,15 +166,12 @@ App.initScorerUI = function() {
   });
 
   document.getElementById("btn-undo-turn").addEventListener("click", () => {
-    if (App.activeMatch && App.activeMatch.undo()) App.renderScorer();
+    if (App.activeMatch && App.activeMatch.undo()) {
+      const modal = document.getElementById("modal-match-finish");
+      if (modal) modal.style.display = "none";
+      App.renderScorer();
+    }
   });
-
-  const btnFinishBullOff = document.getElementById("btn-finish-leg-bull-off");
-  if (btnFinishBullOff) {
-    btnFinishBullOff.addEventListener("click", () => {
-      if (App.activeMatch && !App.activeMatch.isFinished) App.openBullOffModal();
-    });
-  }
 
   const p1Box = document.getElementById("scorer-p1-box");
   const p2Box = document.getElementById("scorer-p2-box");

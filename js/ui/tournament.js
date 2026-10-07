@@ -92,7 +92,8 @@ App.renderTournamentDashboard = function() {
 
       table.forEach((row, idx) => {
         const isQualifying = idx < advance;
-        const diffDisplay = row.diff > 0 ? `+${row.diff}` : `${row.diff}`;
+        const diffVal = (row.legDiff !== undefined) ? row.legDiff : (row.diff || 0);
+        const diffDisplay = diffVal > 0 ? `+${diffVal}` : `${diffVal}`;
         tableHtml += `
           <tr class="${isQualifying ? 'qualifying-row' : ''}">
             <td style="text-align: center; font-weight: 700;">#${idx + 1}</td>
@@ -100,7 +101,7 @@ App.renderTournamentDashboard = function() {
             <td style="text-align: center;">${row.played}</td>
             <td style="text-align: center;">${row.won}</td>
             <td style="text-align: center;">${row.lost}</td>
-            <td style="text-align: center; color: ${row.diff > 0 ? 'var(--accent)' : (row.diff < 0 ? 'var(--accent-red)' : 'var(--text-muted)')}; font-weight: 600;">${diffDisplay}</td>
+            <td style="text-align: center; color: ${diffVal > 0 ? 'var(--accent)' : (diffVal < 0 ? 'var(--accent-red)' : 'var(--text-muted)')}; font-weight: 600;">${diffDisplay}</td>
             <td style="text-align: center; font-weight: 700; color: var(--accent-gold); font-size: 0.95rem;">${row.points}</td>
           </tr>
         `;
@@ -218,15 +219,25 @@ App.renderBracketTree = function() {
   container.innerHTML = "";
   if (!App.activeTournament || !App.activeTournament.knockoutRounds) return;
 
-  const totalRounds = App.activeTournament.knockoutRounds.length;
-  App.activeTournament.knockoutRounds.forEach((round, rIdx) => {
+  const tourney = App.activeTournament;
+  const totalRounds = tourney.knockoutRounds.length;
+  const repEnabled = Boolean(tourney.repechageConfig && tourney.repechageConfig.enabled && tourney.repechageRounds && tourney.repechageRounds.length > 0);
+
+  tourney.knockoutRounds.forEach((round, rIdx) => {
     const col = document.createElement("div");
     col.className = "bracket-column";
     let roundTitle = `Round ${rIdx + 1}`;
-    if (rIdx === totalRounds - 1) roundTitle = "🏆 Grand Final";
-    else if (rIdx === totalRounds - 2) roundTitle = "Semi-Finals (Cross-Over)";
-    else if (rIdx === totalRounds - 3) roundTitle = (totalRounds === 4) ? "Main Half-Finals" : "Quarter-Finals";
-    else if (rIdx === 0) roundTitle = "Quarter-Finals";
+    if (rIdx === totalRounds - 1) {
+      roundTitle = "🏆 Grand Final";
+    } else if (rIdx === totalRounds - 2) {
+      roundTitle = repEnabled ? "Semi-Finals (Cross-Over)" : "Semi-Finals";
+    } else if (rIdx === totalRounds - 3) {
+      roundTitle = repEnabled ? "Main Half-Finals" : "Quarter-Finals";
+    } else if (rIdx === 0 && totalRounds === 3) {
+      roundTitle = "Round 1 (Half-Finals)";
+    } else if (rIdx === 0 && totalRounds === 4) {
+      roundTitle = "Quarter-Finals";
+    }
 
     col.innerHTML = `<h4>${roundTitle}</h4>`;
     round.forEach(m => {
@@ -235,7 +246,6 @@ App.renderBracketTree = function() {
     container.appendChild(col);
   });
 
-  const tourney = App.activeTournament;
   if (tourney.enableBronzeMatch && tourney.bronzeMatch) {
     const col = document.createElement("div");
     col.className = "bracket-column";
@@ -422,7 +432,8 @@ App.initTournamentUI = function() {
       trackDoubles: true,
       bullOffAfterRounds: tBullRounds,
       repechageConfig,
-      enableBronzeMatch
+      enableBronzeMatch,
+      seedBracket: true
     });
 
     App.activeTournament.start();

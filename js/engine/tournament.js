@@ -22,6 +22,7 @@
           reEntryRound: 1
         };
         this.enableBronzeMatch = config.enableBronzeMatch !== false;
+        this.seedBracket = config.seedBracket;
         this.groups = [];
         this.knockoutRounds = [];
         this.repechageRounds = [];
@@ -87,7 +88,7 @@
       updateGroupStandings(group) {
         const table = {};
         group.players.forEach(p => {
-          table[p] = { player: p, played: 0, won: 0, lost: 0, legsFor: 0, legsAgainst: 0, legDiff: 0, points: 0 };
+          table[p] = { player: p, played: 0, won: 0, lost: 0, legsFor: 0, legsAgainst: 0, legDiff: 0, diff: 0, points: 0 };
         });
 
         group.matches.forEach(m => {
@@ -104,7 +105,9 @@
               else { s1.points += 1; s2.points += 1; }
 
               s1.legDiff = s1.legsFor - s1.legsAgainst;
+              s1.diff = s1.legDiff;
               s2.legDiff = s2.legsFor - s2.legsAgainst;
+              s2.diff = s2.legDiff;
             }
           }
         });
@@ -150,7 +153,7 @@
           });
         }
 
-        this.createBracket(qualified.filter(Boolean));
+        this.createBracket(qualified.filter(Boolean), false);
         this.status = "knockout";
       }
 
@@ -158,42 +161,62 @@
         this.createBracket([...this.players]);
       }
 
-      createBracket(playerList) {
+      static getBracketSeedOrder(size) {
+        let order = [1, 2];
+        while (order.length < size) {
+          const nextOrder = [];
+          const sum = order.length * 2 + 1;
+          for (const seed of order) {
+            nextOrder.push(seed);
+            nextOrder.push(sum - seed);
+          }
+          order = nextOrder;
+        }
+        return order;
+      }
+
+      createBracket(playerList, seedOverride = undefined) {
         let size = 2;
         while (size < playerList.length) size *= 2;
+        const repEnabled = Boolean(this.repechageConfig && this.repechageConfig.enabled && playerList.length >= 3);
+        if (size < 4 && repEnabled) size = 4;
 
-        const bracketPlayers = [...playerList];
-        while (bracketPlayers.length < size) bracketPlayers.push("BYE");
-
-        const repEnabled = Boolean(this.repechageConfig && this.repechageConfig.enabled && size >= 4);
-
-        this.knockoutRounds = [];
-        const firstRoundMatches = [];
-        const roundMatchesCount = size / 2;
-
-        for (let i = 0; i < roundMatchesCount; i++) {
-          const p1 = bracketPlayers[i * 2];
-          const p2 = bracketPlayers[i * 2 + 1];
-          const match = {
-            id: `ko_r1_m${i + 1}`,
-            roundIndex: 0,
-            matchIndex: i,
-            stage: "knockout",
-            stageName: (size === 4) ? "Semi-Finals" : (size === 8) ? "Quarter-Finals" : "Round 1",
-            player1: p1,
-            player2: p2,
-            legsP1: 0,
-            legsP2: 0,
-            winner: null,
-            isFinished: false
-          };
-          this.checkByeMatch(match);
-          firstRoundMatches.push(match);
+        const shouldSeed = (seedOverride !== undefined) ? Boolean(seedOverride) : ((this.seedBracket !== undefined) ? Boolean(this.seedBracket) : (playerList.length < size));
+        let bracketPlayers;
+        if (shouldSeed) {
+          const seedOrder = Tournament.getBracketSeedOrder(size);
+          bracketPlayers = seedOrder.map(s => s <= playerList.length ? playerList[s - 1] : "BYE");
+        } else {
+          bracketPlayers = [...playerList];
+          while (bracketPlayers.length < size) bracketPlayers.push("BYE");
         }
 
-        this.knockoutRounds.push(firstRoundMatches);
+        this.knockoutRounds = [];
 
         if (!repEnabled) {
+          // Standard single elimination bracket without repechage
+          const firstRoundMatches = [];
+          const roundMatchesCount = size / 2;
+
+          for (let i = 0; i < roundMatchesCount; i++) {
+            const match = {
+              id: `ko_r1_m${i + 1}`,
+              roundIndex: 0,
+              matchIndex: i,
+              stage: "knockout",
+              stageName: (size === 2) ? "🏆 Grand Final" : ((size === 4) ? "Semi-Finals" : ((size === 8) ? "Quarter-Finals" : "Round 1")),
+              player1: bracketPlayers[i * 2],
+              player2: bracketPlayers[i * 2 + 1],
+              legsP1: 0,
+              legsP2: 0,
+              winner: null,
+              isFinished: false
+            };
+            this.checkByeMatch(match);
+            firstRoundMatches.push(match);
+          }
+          this.knockoutRounds.push(firstRoundMatches);
+
           let currentCount = roundMatchesCount / 2;
           let rIdx = 1;
           while (currentCount >= 1) {
@@ -203,6 +226,8 @@
                 id: `ko_r${rIdx + 1}_m${i + 1}`,
                 roundIndex: rIdx,
                 matchIndex: i,
+                stage: "knockout",
+                stageName: (currentCount === 1) ? "🏆 Grand Final" : ((currentCount === 2) ? "Semi-Finals" : ((currentCount === 4) ? "Quarter-Finals" : `Round ${rIdx + 1}`)),
                 player1: null,
                 player2: null,
                 legsP1: 0,
@@ -217,7 +242,29 @@
           }
           this.repechageRounds = [];
         } else {
-          // Symmetric Double-Elimination Repechage with Cross-Over Semi-Finals
+          // Universal Symmetric Double-Elimination Repechage with Semi-Finals Crossover (size >= 4)
+          const roundMatchesCount = size / 2;
+          const firstRoundMatches = [];
+
+          for (let i = 0; i < roundMatchesCount; i++) {
+            const match = {
+              id: `ko_r1_m${i + 1}`,
+              roundIndex: 0,
+              matchIndex: i,
+              stage: "knockout",
+              stageName: (size === 4) ? "Round 1 (Half-Finals)" : ((size === 8) ? "Quarter-Finals" : "Round 1"),
+              player1: bracketPlayers[i * 2],
+              player2: bracketPlayers[i * 2 + 1],
+              legsP1: 0,
+              legsP2: 0,
+              winner: null,
+              isFinished: false
+            };
+            this.checkByeMatch(match);
+            firstRoundMatches.push(match);
+          }
+          this.knockoutRounds.push(firstRoundMatches);
+
           let currentCount = roundMatchesCount / 2;
           let rIdx = 1;
           while (currentCount >= 2) {
@@ -242,7 +289,7 @@
             rIdx++;
           }
 
-          // Semi-Finals
+          // Semi-Finals (2 matches)
           this.knockoutRounds.push([
             {
               id: `ko_r${rIdx + 1}_m1`,
@@ -273,7 +320,7 @@
           ]);
           rIdx++;
 
-          // Grand Final
+          // Grand Final (1 match)
           this.knockoutRounds.push([
             {
               id: `ko_r${rIdx + 1}_m1`,
@@ -290,56 +337,67 @@
             }
           ]);
 
-          // Repechage bracket
+          // Repechage rounds
+          const p = Math.round(Math.log2(size));
           this.repechageRounds = [];
-          const rep0Count = Math.max(1, Math.floor(roundMatchesCount / 2));
-          const rep0 = [];
-          for (let i = 0; i < rep0Count; i++) {
-            rep0.push({
-              id: `ko_rep_r1_m${i + 1}`,
-              roundIndex: 0,
-              matchIndex: i,
-              stage: "repechage",
-              stageName: (size === 4) ? "3rd Place Match" : `Repechage Round 1 (${i < rep0Count / 2 ? "Top" : "Bottom"})`,
-              player1: null,
-              player2: null,
-              legsP1: 0,
-              legsP2: 0,
-              winner: null,
-              isFinished: false
-            });
-          }
-          this.repechageRounds.push(rep0);
-
-          if (size >= 8) {
+          if (p === 2) {
+            // size 4
             this.repechageRounds.push([
               {
-                id: "ko_rep_r2_m1",
-                roundIndex: 1,
+                id: "ko_rep_r1_m1",
+                roundIndex: 0,
                 matchIndex: 0,
                 stage: "repechage",
                 stageName: "Top Repechage Final",
                 player1: null,
-                player2: null,
+                player2: "BYE",
                 legsP1: 0,
                 legsP2: 0,
                 winner: null,
                 isFinished: false
               },
               {
-                id: "ko_rep_r2_m2",
-                roundIndex: 1,
+                id: "ko_rep_r1_m2",
+                roundIndex: 0,
                 matchIndex: 1,
                 stage: "repechage",
                 stageName: "Bottom Repechage Final",
                 player1: null,
-                player2: null,
+                player2: "BYE",
                 legsP1: 0,
                 legsP2: 0,
                 winner: null,
                 isFinished: false
               }
             ]);
+          } else {
+            const totalRepRounds = 2 * (p - 2);
+            let curRepCount = size / 4;
+            for (let s = 0; s < totalRepRounds; s++) {
+              const isRepFinal = (s === totalRepRounds - 1);
+              const isHalving = (s > 0 && s % 2 === 0);
+              if (isHalving) curRepCount /= 2;
+              const round = [];
+              for (let i = 0; i < curRepCount; i++) {
+                let name = `Repechage Round ${s + 1}`;
+                if (isRepFinal) name = (i === 0) ? "Top Repechage Final" : "Bottom Repechage Final";
+                else if (s === 0) name = `Repechage Round 1 (${i < curRepCount / 2 ? "Top" : "Bottom"})`;
+                round.push({
+                  id: `ko_rep_r${s + 1}_m${i + 1}`,
+                  roundIndex: s,
+                  matchIndex: i,
+                  stage: "repechage",
+                  stageName: name,
+                  player1: null,
+                  player2: null,
+                  legsP1: 0,
+                  legsP2: 0,
+                  winner: null,
+                  isFinished: false
+                });
+              }
+              this.repechageRounds.push(round);
+            }
           }
         }
 
@@ -365,16 +423,36 @@
       }
 
       checkByeMatch(match) {
-        if (!match || match.isFinished) return;
-        if (match.player1 && match.player2 === "BYE") {
+        if (!match || match.isFinished) return false;
+        if (match.player1 === "BYE" && match.player2 === "BYE") {
+          match.winner = "BYE";
+          match.isFinished = true;
+          return true;
+        }
+        if (match.player1 && match.player1 !== "BYE" && match.player2 === "BYE") {
           match.winner = match.player1;
           match.isFinished = true;
           match.legsP1 = this.matchSettings.legsToWin;
-        } else if (match.player2 && match.player1 === "BYE") {
+          return true;
+        } else if (match.player2 && match.player2 !== "BYE" && match.player1 === "BYE") {
           match.winner = match.player2;
           match.isFinished = true;
           match.legsP2 = this.matchSettings.legsToWin;
+          return true;
         }
+        return false;
+      }
+
+      setMatchSlot(match, slot, newPlayer) {
+        if (!match || match[slot] === newPlayer) return false;
+        match[slot] = newPlayer;
+        if (match.isFinished) {
+          match.isFinished = false;
+          match.winner = null;
+          match.legsP1 = 0;
+          match.legsP2 = 0;
+        }
+        return true;
       }
 
       getMatchLoser(m) {
@@ -383,147 +461,239 @@
       }
 
       propagateBracket() {
-        const repEnabled = Boolean(this.repechageConfig && this.repechageConfig.enabled && this.repechageRounds.length > 0 && this.knockoutRounds.length >= 3);
+        const repEnabled = Boolean(this.repechageConfig && this.repechageConfig.enabled && this.repechageRounds.length > 0);
 
-        if (!repEnabled) {
-          for (let r = 0; r < this.knockoutRounds.length - 1; r++) {
-            const currentRound = this.knockoutRounds[r];
-            const nextRound = this.knockoutRounds[r + 1];
+        let changed = false;
+        do {
+          changed = false;
 
-            currentRound.forEach((m, idx) => {
-              if (m.isFinished && m.winner) {
-                const nextMatchIdx = Math.floor(idx / 2);
-                const isSlot1 = (idx % 2 === 0);
-                if (nextRound && nextRound[nextMatchIdx]) {
-                  if (isSlot1) nextRound[nextMatchIdx].player1 = m.winner;
-                  else nextRound[nextMatchIdx].player2 = m.winner;
-                  this.checkByeMatch(nextRound[nextMatchIdx]);
+          if (!repEnabled) {
+            for (let r = 0; r < this.knockoutRounds.length - 1; r++) {
+              const currentRound = this.knockoutRounds[r];
+              const nextRound = this.knockoutRounds[r + 1];
+
+              currentRound.forEach((m, idx) => {
+                if (m.isFinished && m.winner) {
+                  const nextMatchIdx = Math.floor(idx / 2);
+                  const slot = (idx % 2 === 0) ? "player1" : "player2";
+                  if (nextRound && nextRound[nextMatchIdx]) {
+                    if (this.setMatchSlot(nextRound[nextMatchIdx], slot, m.winner)) changed = true;
+                    if (this.checkByeMatch(nextRound[nextMatchIdx])) changed = true;
+                  }
                 }
-              }
-            });
-          }
+              });
+            }
 
-          if (this.enableBronzeMatch && this.knockoutRounds.length >= 2) {
-            const semiRound = this.knockoutRounds[this.knockoutRounds.length - 2];
-            if (semiRound && semiRound.length >= 2 && semiRound[0].isFinished && semiRound[1].isFinished) {
-              if (this.bronzeMatch) {
-                this.bronzeMatch.player1 = this.getMatchLoser(semiRound[0]);
-                this.bronzeMatch.player2 = this.getMatchLoser(semiRound[1]);
-                this.checkByeMatch(this.bronzeMatch);
+            if (this.enableBronzeMatch && this.knockoutRounds.length >= 2) {
+              const semiRound = this.knockoutRounds[this.knockoutRounds.length - 2];
+              if (semiRound && semiRound.length >= 2 && semiRound[0].isFinished && semiRound[1].isFinished) {
+                if (this.bronzeMatch) {
+                  const l1 = this.getMatchLoser(semiRound[0]);
+                  const l2 = this.getMatchLoser(semiRound[1]);
+                  if (this.setMatchSlot(this.bronzeMatch, "player1", l1)) changed = true;
+                  if (this.setMatchSlot(this.bronzeMatch, "player2", l2)) changed = true;
+                  if (this.checkByeMatch(this.bronzeMatch)) changed = true;
+                }
               }
             }
-          }
-        } else {
-          // Symmetric Double-Elimination Repechage with Cross-Over Semi-Finals
-          const sfRoundIdx = this.knockoutRounds.length - 2;
-          const finalRoundIdx = this.knockoutRounds.length - 1;
-          const mainHalfFinalIdx = sfRoundIdx - 1;
+          } else {
+            // Universal Symmetric Double-Elimination Repechage with Semi-Finals Crossover
+            const sfRoundIdx = this.knockoutRounds.length - 2;
+            const finalRoundIdx = this.knockoutRounds.length - 1;
+            const mainHalfFinalIdx = sfRoundIdx - 1;
 
-          // 1. Main rounds before Half-Finals
-          for (let r = 0; r < mainHalfFinalIdx; r++) {
-            const curRound = this.knockoutRounds[r];
-            const nextRound = this.knockoutRounds[r + 1];
-            curRound.forEach((m, idx) => {
-              if (m.isFinished && m.winner) {
-                const nextMatchIdx = Math.floor(idx / 2);
-                const isSlot1 = (idx % 2 === 0);
-                if (nextRound && nextRound[nextMatchIdx]) {
-                  if (isSlot1) nextRound[nextMatchIdx].player1 = m.winner;
-                  else nextRound[nextMatchIdx].player2 = m.winner;
-                  this.checkByeMatch(nextRound[nextMatchIdx]);
-                }
-              }
-            });
-          }
-
-          // 2. Main Round 0 losers -> Repechage Round 0
-          if (this.repechageRounds.length > 0) {
-            const r0 = this.knockoutRounds[0];
-            const rep0 = this.repechageRounds[0];
-            r0.forEach((m, idx) => {
-              if (m.isFinished && m.winner) {
-                const loser = this.getMatchLoser(m);
-                const nextMatchIdx = Math.floor(idx / 2);
-                const isSlot1 = (idx % 2 === 0);
-                if (rep0[nextMatchIdx]) {
-                  if (isSlot1) rep0[nextMatchIdx].player1 = loser;
-                  else rep0[nextMatchIdx].player2 = loser;
-                  this.checkByeMatch(rep0[nextMatchIdx]);
-                }
-              }
-            });
-          }
-
-          // 3. Intermediate Repechage rounds (if any)
-          for (let r = 0; r < this.repechageRounds.length - 1; r++) {
-            const curRep = this.repechageRounds[r];
-            const nextRep = this.repechageRounds[r + 1];
-            curRep.forEach((m, idx) => {
-              if (m.isFinished && m.winner) {
-                if (nextRep[idx]) {
-                  nextRep[idx].player1 = m.winner;
-                  this.checkByeMatch(nextRep[idx]);
-                }
-              }
-            });
-          }
-
-          // 4. Main Half-Finals results:
-          // Winners -> Semi-Finals slot 1
-          // Losers -> Final Repechage Round slot 2
-          const mainHalfRound = this.knockoutRounds[mainHalfFinalIdx];
-          const sfRound = this.knockoutRounds[sfRoundIdx];
-          const repFinalRound = this.repechageRounds[this.repechageRounds.length - 1];
-
-          if (mainHalfRound && sfRound) {
-            mainHalfRound.forEach((m, idx) => {
-              if (m.isFinished && m.winner) {
-                if (sfRound[idx]) {
-                  sfRound[idx].player1 = m.winner;
-                  this.checkByeMatch(sfRound[idx]);
-                }
-                if (repFinalRound && repFinalRound[idx]) {
-                  repFinalRound[idx].player2 = this.getMatchLoser(m);
-                  this.checkByeMatch(repFinalRound[idx]);
-                }
-              }
-            });
-          }
-
-          // 5. Final Repechage Round CROSSOVER into Semi-Finals:
-          // Top Rep Winner (idx 0) -> SF 2 (sfRound[1].player2, plays Bottom Main Qualifier)
-          // Bottom Rep Winner (idx 1) -> SF 1 (sfRound[0].player2, plays Top Main Qualifier)
-          if (repFinalRound && sfRound) {
-            if (repFinalRound[0] && repFinalRound[0].isFinished && repFinalRound[0].winner) {
-              sfRound[1].player2 = repFinalRound[0].winner;
-              this.checkByeMatch(sfRound[1]);
+            // Initial BYE check for KO Round 0
+            if (this.knockoutRounds[0]) {
+              this.knockoutRounds[0].forEach(m => {
+                if (this.checkByeMatch(m)) changed = true;
+              });
             }
-            if (repFinalRound[1] && repFinalRound[1].isFinished && repFinalRound[1].winner) {
-              sfRound[0].player2 = repFinalRound[1].winner;
-              this.checkByeMatch(sfRound[0]);
+
+            if (this.knockoutRounds.length === 3 && this.repechageRounds.length === 1) {
+              // Size 4 (p = 2): R0 (2 matches) -> SF (2 matches) -> Final (1 match)
+              const r0 = this.knockoutRounds[0];
+              const sfRound = this.knockoutRounds[sfRoundIdx];
+              const repFinalRound = this.repechageRounds[0];
+
+              // Main R0 winners -> SF slot 1
+              if (r0[0].isFinished && r0[0].winner && this.setMatchSlot(sfRound[0], "player1", r0[0].winner)) {
+                changed = true;
+              }
+              if (r0[1].isFinished && r0[1].winner && this.setMatchSlot(sfRound[1], "player1", r0[1].winner)) {
+                changed = true;
+              }
+
+              // Main R0 losers -> Rep Final slot 1 (slot 2 is already "BYE")
+              if (r0[0].isFinished && r0[0].winner) {
+                const loser = this.getMatchLoser(r0[0]);
+                if (this.setMatchSlot(repFinalRound[0], "player1", loser)) changed = true;
+              }
+              if (r0[1].isFinished && r0[1].winner) {
+                const loser = this.getMatchLoser(r0[1]);
+                if (this.setMatchSlot(repFinalRound[1], "player1", loser)) changed = true;
+              }
+              repFinalRound.forEach(m => {
+                if (this.checkByeMatch(m)) changed = true;
+              });
+
+              // Rep Final winners crossover -> SF slot 2
+              if (repFinalRound[0].isFinished && repFinalRound[0].winner && this.setMatchSlot(sfRound[1], "player2", repFinalRound[0].winner)) {
+                changed = true;
+              }
+              if (repFinalRound[1].isFinished && repFinalRound[1].winner && this.setMatchSlot(sfRound[0], "player2", repFinalRound[1].winner)) {
+                changed = true;
+              }
+
+              sfRound.forEach(m => {
+                if (this.checkByeMatch(m)) changed = true;
+              });
+
+              // Semi-Finals -> Grand Final and Bronze Match
+              const finalMatch = this.knockoutRounds[finalRoundIdx][0];
+              if (sfRound[0].isFinished && sfRound[0].winner && this.setMatchSlot(finalMatch, "player1", sfRound[0].winner)) {
+                changed = true;
+              }
+              if (sfRound[1].isFinished && sfRound[1].winner && this.setMatchSlot(finalMatch, "player2", sfRound[1].winner)) {
+                changed = true;
+              }
+              if (sfRound[0].isFinished && sfRound[0].winner && this.bronzeMatch) {
+                const l = this.getMatchLoser(sfRound[0]);
+                if (this.setMatchSlot(this.bronzeMatch, "player1", l)) changed = true;
+              }
+              if (sfRound[1].isFinished && sfRound[1].winner && this.bronzeMatch) {
+                const l = this.getMatchLoser(sfRound[1]);
+                if (this.setMatchSlot(this.bronzeMatch, "player2", l)) changed = true;
+              }
+              if (finalMatch && this.checkByeMatch(finalMatch)) changed = true;
+              if (this.bronzeMatch && this.checkByeMatch(this.bronzeMatch)) changed = true;
+            } else {
+              // Size >= 8 (p >= 3)
+              // 1. KO rounds before Half-Finals
+              for (let r = 0; r < mainHalfFinalIdx; r++) {
+                const curRound = this.knockoutRounds[r];
+                const nextRound = this.knockoutRounds[r + 1];
+                curRound.forEach((m, idx) => {
+                  if (m.isFinished && m.winner) {
+                    const targetIdx = Math.floor(idx / 2);
+                    const slot = (idx % 2 === 0) ? "player1" : "player2";
+                    if (nextRound && nextRound[targetIdx]) {
+                      if (this.setMatchSlot(nextRound[targetIdx], slot, m.winner)) changed = true;
+                      if (this.checkByeMatch(nextRound[targetIdx])) changed = true;
+                    }
+                  }
+                });
+              }
+
+              // 2. Main R0 losers -> Rep R0
+              const r0 = this.knockoutRounds[0];
+              const rep0 = this.repechageRounds[0];
+              if (r0 && rep0) {
+                r0.forEach((m, idx) => {
+                  if (m.isFinished && m.winner) {
+                    const loser = this.getMatchLoser(m);
+                    const targetIdx = Math.floor(idx / 2);
+                    const slot = (idx % 2 === 0) ? "player1" : "player2";
+                    if (rep0[targetIdx]) {
+                      if (this.setMatchSlot(rep0[targetIdx], slot, loser)) changed = true;
+                      if (this.checkByeMatch(rep0[targetIdx])) changed = true;
+                    }
+                  }
+                });
+              }
+
+              // 3. Repechage progression
+              for (let s = 0; s < this.repechageRounds.length - 1; s++) {
+                const curRep = this.repechageRounds[s];
+                const nextRep = this.repechageRounds[s + 1];
+                const nextIsIntake = (s % 2 === 0);
+
+                if (nextIsIntake) {
+                  // Intake round: winners of curRep -> slot 1 of nextRep
+                  // Losers of Main round (s/2 + 1) -> slot 2 of nextRep
+                  const mainIntakeRoundIdx = (s / 2) + 1;
+                  const mainIntakeRound = this.knockoutRounds[mainIntakeRoundIdx];
+                  curRep.forEach((m, idx) => {
+                    if (m.isFinished && m.winner && nextRep[idx]) {
+                      if (this.setMatchSlot(nextRep[idx], "player1", m.winner)) changed = true;
+                      if (this.checkByeMatch(nextRep[idx])) changed = true;
+                    }
+                  });
+                  if (mainIntakeRound) {
+                    mainIntakeRound.forEach((m, idx) => {
+                      if (m.isFinished && m.winner && nextRep[idx]) {
+                        const loser = this.getMatchLoser(m);
+                        if (this.setMatchSlot(nextRep[idx], "player2", loser)) changed = true;
+                        if (this.checkByeMatch(nextRep[idx])) changed = true;
+                      }
+                    });
+                  }
+                } else {
+                  // Halving round: winners of curRep -> slot 1 / slot 2 of nextRep
+                  curRep.forEach((m, idx) => {
+                    if (m.isFinished && m.winner) {
+                      const targetIdx = Math.floor(idx / 2);
+                      const slot = (idx % 2 === 0) ? "player1" : "player2";
+                      if (nextRep[targetIdx]) {
+                        if (this.setMatchSlot(nextRep[targetIdx], slot, m.winner)) changed = true;
+                        if (this.checkByeMatch(nextRep[targetIdx])) changed = true;
+                      }
+                    }
+                  });
+                }
+              }
+
+              // 4. Main Half-Finals winners -> SF slot 1
+              const mainHalfRound = this.knockoutRounds[mainHalfFinalIdx];
+              const sfRound = this.knockoutRounds[sfRoundIdx];
+              if (mainHalfRound && sfRound) {
+                mainHalfRound.forEach((m, idx) => {
+                  if (m.isFinished && m.winner && sfRound[idx]) {
+                    if (this.setMatchSlot(sfRound[idx], "player1", m.winner)) changed = true;
+                    if (this.checkByeMatch(sfRound[idx])) changed = true;
+                  }
+                });
+              }
+
+              // 5. Rep Finals -> SF crossover slot 2
+              const repFinalRound = this.repechageRounds[this.repechageRounds.length - 1];
+              if (repFinalRound && sfRound) {
+                // Top Rep (idx 0) -> SF 2 (sfRound[1].player2)
+                if (repFinalRound[0] && repFinalRound[0].isFinished && repFinalRound[0].winner) {
+                  if (this.setMatchSlot(sfRound[1], "player2", repFinalRound[0].winner)) changed = true;
+                  if (this.checkByeMatch(sfRound[1])) changed = true;
+                }
+                // Bottom Rep (idx 1) -> SF 1 (sfRound[0].player2)
+                if (repFinalRound[1] && repFinalRound[1].isFinished && repFinalRound[1].winner) {
+                  if (this.setMatchSlot(sfRound[0], "player2", repFinalRound[1].winner)) changed = true;
+                  if (this.checkByeMatch(sfRound[0])) changed = true;
+                }
+              }
+
+              // 6. Semi-Finals -> Grand Final and Bronze Match
+              const finalMatch = this.knockoutRounds[finalRoundIdx][0];
+              if (sfRound[0] && sfRound[0].isFinished && sfRound[0].winner) {
+                if (this.setMatchSlot(finalMatch, "player1", sfRound[0].winner)) changed = true;
+                if (this.bronzeMatch) {
+                  const l = this.getMatchLoser(sfRound[0]);
+                  if (this.setMatchSlot(this.bronzeMatch, "player1", l)) changed = true;
+                }
+              }
+              if (sfRound[1] && sfRound[1].isFinished && sfRound[1].winner) {
+                if (this.setMatchSlot(finalMatch, "player2", sfRound[1].winner)) changed = true;
+                if (this.bronzeMatch) {
+                  const l = this.getMatchLoser(sfRound[1]);
+                  if (this.setMatchSlot(this.bronzeMatch, "player2", l)) changed = true;
+                }
+              }
+              if (finalMatch && this.checkByeMatch(finalMatch)) changed = true;
+              if (this.bronzeMatch && this.checkByeMatch(this.bronzeMatch)) changed = true;
             }
           }
-
-          // 6. Semi-Finals results -> Grand Final and Bronze Match
-          const finalMatch = this.knockoutRounds[finalRoundIdx][0];
-          if (sfRound[0] && sfRound[0].isFinished && sfRound[0].winner) {
-            finalMatch.player1 = sfRound[0].winner;
-            if (this.bronzeMatch) this.bronzeMatch.player1 = this.getMatchLoser(sfRound[0]);
-            this.checkByeMatch(finalMatch);
-          }
-          if (sfRound[1] && sfRound[1].isFinished && sfRound[1].winner) {
-            finalMatch.player2 = sfRound[1].winner;
-            if (this.bronzeMatch) this.bronzeMatch.player2 = this.getMatchLoser(sfRound[1]);
-            this.checkByeMatch(finalMatch);
-          }
-          if (this.bronzeMatch) {
-            this.checkByeMatch(this.bronzeMatch);
-          }
-        }
+        } while (changed);
 
         const finalRound = this.knockoutRounds[this.knockoutRounds.length - 1];
-        const finalFinished = finalRound && finalRound[0] && finalRound[0].isFinished;
-        const bronzeFinished = !this.enableBronzeMatch || !this.bronzeMatch || this.bronzeMatch.isFinished;
+        const finalFinished = Boolean(finalRound && finalRound[0] && finalRound[0].isFinished);
+        const bronzeFinished = !this.enableBronzeMatch || !this.bronzeMatch || Boolean(this.bronzeMatch.isFinished);
         if (finalFinished && bronzeFinished) {
           this.status = "finished";
         }

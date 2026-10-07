@@ -48,6 +48,9 @@ App.promptMatchStarter = function(config) {
   if (closeBtn) {
     closeBtn.onclick = () => {
       modal.style.display = "none";
+      App.currentTournamentMatch = null;
+      const badge = document.getElementById("tournament-context-badge");
+      if (badge) badge.style.display = "none";
     };
   }
 
