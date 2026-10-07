@@ -295,6 +295,88 @@ def test_group_tournament_generation():
     assert len(matches_gA) == 1
     assert len(matches_gB) == 1
 
+def test_repechage_and_bronze_tournament_engine():
+    import subprocess
+    node_test_script = """
+    const fs = require('fs');
+    const window = {};
+    eval(fs.readFileSync('js/engine/tournament.js', 'utf8'));
+    const Tournament = window.Tournament;
+
+    const t = new Tournament({
+      name: 'Symmetric Repechage & Bronze Check',
+      format: 'direct_knockout',
+      players: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'],
+      repechageConfig: {
+        enabled: true,
+        fromRound: 0,
+        toRound: 0,
+        reEntryRound: 1
+      },
+      enableBronzeMatch: true,
+      legsToWin: 2
+    });
+
+    t.start();
+    if (t.knockoutRounds.length !== 4) throw new Error('Knockout rounds count mismatch: ' + t.knockoutRounds.length);
+    if (t.repechageRounds.length !== 2) throw new Error('Repechage rounds count mismatch: ' + t.repechageRounds.length);
+    if (!t.bronzeMatch) throw new Error('Bronze match not created');
+
+    // 1. Round 0 (Quarter-Finals)
+    t.recordMatchResult('ko_r1_m1', { winner: 'P1', legsP1: 2, legsP2: 0, p1Stats: { name: 'P1' }, p2Stats: { name: 'P2' } });
+    t.recordMatchResult('ko_r1_m2', { winner: 'P3', legsP1: 2, legsP2: 1, p1Stats: { name: 'P3' }, p2Stats: { name: 'P4' } });
+    t.recordMatchResult('ko_r1_m3', { winner: 'P5', legsP1: 2, legsP2: 0, p1Stats: { name: 'P5' }, p2Stats: { name: 'P6' } });
+    t.recordMatchResult('ko_r1_m4', { winner: 'P7', legsP1: 2, legsP2: 1, p1Stats: { name: 'P7' }, p2Stats: { name: 'P8' } });
+
+    // Check main R1 (Half-Finals) and repechage R0 routing
+    if (t.knockoutRounds[1][0].player1 !== 'P1' || t.knockoutRounds[1][0].player2 !== 'P3') throw new Error('Main R1 M1 failed');
+    if (t.knockoutRounds[1][1].player1 !== 'P5' || t.knockoutRounds[1][1].player2 !== 'P7') throw new Error('Main R1 M2 failed');
+    if (t.repechageRounds[0][0].player1 !== 'P2' || t.repechageRounds[0][0].player2 !== 'P4') throw new Error('Rep R0 M1 failed');
+    if (t.repechageRounds[0][1].player1 !== 'P6' || t.repechageRounds[0][1].player2 !== 'P8') throw new Error('Rep R0 M2 failed');
+
+    // 2. Play Main R1 (Half-Finals)
+    t.recordMatchResult('ko_r2_m1', { winner: 'P1', legsP1: 2, legsP2: 0, p1Stats: { name: 'P1' }, p2Stats: { name: 'P3' } });
+    t.recordMatchResult('ko_r2_m2', { winner: 'P5', legsP1: 2, legsP2: 0, p1Stats: { name: 'P5' }, p2Stats: { name: 'P7' } });
+
+    // 3. Play Rep R0
+    t.recordMatchResult('ko_rep_r1_m1', { winner: 'P2', legsP1: 2, legsP2: 0, p1Stats: { name: 'P2' }, p2Stats: { name: 'P4' } });
+    t.recordMatchResult('ko_rep_r1_m2', { winner: 'P6', legsP1: 2, legsP2: 1, p1Stats: { name: 'P6' }, p2Stats: { name: 'P8' } });
+
+    // Check Rep R1 (Finals) pairing: Rep R0 winners vs Main QF losers
+    if (t.repechageRounds[1][0].player1 !== 'P2' || t.repechageRounds[1][0].player2 !== 'P3') throw new Error('Rep Final Top failed');
+    if (t.repechageRounds[1][1].player1 !== 'P6' || t.repechageRounds[1][1].player2 !== 'P7') throw new Error('Rep Final Bottom failed');
+
+    // 4. Play Rep R1 (Finals)
+    t.recordMatchResult('ko_rep_r2_m1', { winner: 'P3', legsP1: 2, legsP2: 1, p1Stats: { name: 'P3' }, p2Stats: { name: 'P2' } });
+    t.recordMatchResult('ko_rep_r2_m2', { winner: 'P6', legsP1: 2, legsP2: 0, p1Stats: { name: 'P6' }, p2Stats: { name: 'P7' } });
+
+    // 5. Check Semi-Finals (Round 2) Crossover
+    // SF 1: Top Main (P1) vs Bottom Rep (P6)
+    // SF 2: Bottom Main (P5) vs Top Rep (P3)
+    const sf = t.knockoutRounds[2];
+    if (sf[0].player1 !== 'P1' || sf[0].player2 !== 'P6') throw new Error('SF1 crossover failed: ' + sf[0].player1 + ' vs ' + sf[0].player2);
+    if (sf[1].player1 !== 'P5' || sf[1].player2 !== 'P3') throw new Error('SF2 crossover failed: ' + sf[1].player1 + ' vs ' + sf[1].player2);
+
+    // 6. Play Semi-Finals
+    t.recordMatchResult(sf[0].id, { winner: 'P1', legsP1: 2, legsP2: 0 });
+    t.recordMatchResult(sf[1].id, { winner: 'P3', legsP1: 2, legsP2: 1 });
+
+    // 7. Check Bronze Match and Grand Final
+    if (t.bronzeMatch.player1 !== 'P6' || t.bronzeMatch.player2 !== 'P5') throw new Error('Bronze match pairing failed');
+    const finalMatch = t.knockoutRounds[3][0];
+    if (finalMatch.player1 !== 'P1' || finalMatch.player2 !== 'P3') throw new Error('Grand Final pairing failed');
+
+    // Play Bronze & Final
+    t.recordMatchResult(t.bronzeMatch.id, { winner: 'P5', legsP1: 1, legsP2: 2 });
+    t.recordMatchResult(finalMatch.id, { winner: 'P3', legsP1: 1, legsP2: 2 });
+
+    if (!finalMatch.isFinished || finalMatch.winner !== 'P3') throw new Error('Final match completion failed');
+    if (!t.bronzeMatch.isFinished || t.bronzeMatch.winner !== 'P5') throw new Error('Bronze match completion failed');
+    if (t.status !== 'finished') throw new Error('Tournament finish state failed');
+    """
+    res = subprocess.run(["node", "-e", node_test_script], capture_output=True, text=True)
+    assert res.returncode == 0, f"Repechage & Bronze test failed: {res.stderr}"
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
@@ -308,6 +390,8 @@ if __name__ == "__main__":
     test_group_standings_sort()
     test_bracket_propagation()
     test_csv_export()
-    print("ALL TESTS PASSED: 12/12 checks verified successfully.")
+    test_repechage_and_bronze_tournament_engine()
+    print("ALL TESTS PASSED: 13/13 checks verified successfully.")
+
 
 

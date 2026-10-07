@@ -168,12 +168,49 @@ App.renderTournamentDashboard = function() {
     advanceBox.style.display = "none";
   }
 
-  if (tourney.status === "knockout" || tourney.status === "completed" || tourney.format === "knockout") {
+  if (tourney.status === "knockout" || tourney.status === "finished" || tourney.format === "direct_knockout" || tourney.format === "knockout") {
     bracketContainer.style.display = "block";
     App.renderBracketTree();
   } else {
     bracketContainer.style.display = "none";
   }
+
+  const repContainer = document.getElementById("tourney-repechage-container");
+  if (repContainer) {
+    if (tourney.repechageConfig && tourney.repechageConfig.enabled && tourney.repechageRounds && tourney.repechageRounds.length > 0) {
+      repContainer.style.display = "block";
+      App.renderRepechageTree();
+    } else {
+      repContainer.style.display = "none";
+    }
+  }
+};
+
+App.createMatchCardElement = function(m) {
+  const card = document.createElement("div");
+  card.className = "bracket-match";
+  const p1 = m.player1 || "TBD";
+  const p2 = m.player2 || "TBD";
+  const isBye = p1 === "BYE" || p2 === "BYE";
+  const canPlay = m.player1 && m.player2 && !isBye;
+  const isDone = m.isFinished;
+
+  card.innerHTML = `
+    <div class="bracket-match-p ${m.winner && m.winner === m.player1 ? 'winner' : ''}">
+      <span>${p1}</span>
+      <strong>${isDone ? m.legsP1 : '-'}</strong>
+    </div>
+    <div class="bracket-match-p ${m.winner && m.winner === m.player2 ? 'winner' : ''}">
+      <span>${p2}</span>
+      <strong>${isDone ? m.legsP2 : '-'}</strong>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:0.4rem;">
+      ${isBye ? '<span style="font-size: 0.75rem; color: var(--accent); padding: 0.2rem 0.5rem; font-weight: 600;">BYE ADVANCE</span>' :
+        `<button class="btn btn-secondary btn-sm" ${!canPlay ? 'disabled' : ''} onclick="App.launchTournamentFixture('${m.id}')">${isDone ? 'Modify / Replay' : 'Play'}</button>`
+      }
+    </div>
+  `;
+  return card;
 };
 
 App.renderBracketTree = function() {
@@ -186,36 +223,100 @@ App.renderBracketTree = function() {
     const col = document.createElement("div");
     col.className = "bracket-column";
     let roundTitle = `Round ${rIdx + 1}`;
-    if (rIdx === totalRounds - 1) roundTitle = "🏆 Final";
-    else if (rIdx === totalRounds - 2) roundTitle = "Semi-Finals";
-    else if (rIdx === totalRounds - 3) roundTitle = "Quarter-Finals";
+    if (rIdx === totalRounds - 1) roundTitle = "🏆 Grand Final";
+    else if (rIdx === totalRounds - 2) roundTitle = "Semi-Finals (Cross-Over)";
+    else if (rIdx === totalRounds - 3) roundTitle = (totalRounds === 4) ? "Main Half-Finals" : "Quarter-Finals";
+    else if (rIdx === 0) roundTitle = "Quarter-Finals";
 
     col.innerHTML = `<h4>${roundTitle}</h4>`;
     round.forEach(m => {
-      const card = document.createElement("div");
-      card.className = "bracket-match";
-      const p1 = m.player1 || "TBD";
-      const p2 = m.player2 || "TBD";
-      const canPlay = m.player1 && m.player2;
-      const isDone = m.isFinished;
-
-      card.innerHTML = `
-        <div class="bracket-match-p ${m.winner && m.winner === m.player1 ? 'winner' : ''}">
-          <span>${p1}</span>
-          <strong>${isDone ? m.legsP1 : '-'}</strong>
-        </div>
-        <div class="bracket-match-p ${m.winner && m.winner === m.player2 ? 'winner' : ''}">
-          <span>${p2}</span>
-          <strong>${isDone ? m.legsP2 : '-'}</strong>
-        </div>
-        <div style="display:flex; justify-content:flex-end; margin-top:0.4rem;">
-          <button class="btn btn-secondary btn-sm" ${!canPlay ? 'disabled' : ''} onclick="App.launchTournamentFixture('${m.id}')">${isDone ? 'Modify / Replay' : 'Play'}</button>
-        </div>
-      `;
-      col.appendChild(card);
+      col.appendChild(App.createMatchCardElement(m));
     });
     container.appendChild(col);
   });
+
+  const tourney = App.activeTournament;
+  if (tourney.enableBronzeMatch && tourney.bronzeMatch) {
+    const col = document.createElement("div");
+    col.className = "bracket-column";
+    col.innerHTML = `<h4>🥉 3rd Place Playoff</h4>`;
+    col.appendChild(App.createMatchCardElement(tourney.bronzeMatch));
+    container.appendChild(col);
+  }
+};
+
+App.renderRepechageTree = function() {
+  const container = document.getElementById("repechage-tree-view");
+  if (!container) return;
+  container.innerHTML = "";
+  const tourney = App.activeTournament;
+  if (!tourney || !tourney.repechageRounds) return;
+
+  const totalRepRounds = tourney.repechageRounds.length;
+  tourney.repechageRounds.forEach((round, rIdx) => {
+    const col = document.createElement("div");
+    col.className = "bracket-column";
+    let roundTitle = `Repechage Round ${rIdx + 1}`;
+    if (rIdx === totalRepRounds - 1) roundTitle = "🎯 Repechage Finals (Top & Bottom)";
+    else if (rIdx === 0) roundTitle = "Repechage R1 (Losers)";
+    col.innerHTML = `<h4>${roundTitle}</h4>`;
+    round.forEach(m => {
+      col.appendChild(App.createMatchCardElement(m));
+    });
+    container.appendChild(col);
+  });
+};
+
+App.updateRepechageRoundOptions = function() {
+  const fromSel = document.getElementById("tourney-rep-from-round");
+  const toSel = document.getElementById("tourney-rep-to-round");
+  const reEntrySel = document.getElementById("tourney-rep-reentry-round");
+  if (!fromSel || !toSel || !reEntrySel) return;
+
+  const count = App.registeredPlayers.length;
+  let size = 2;
+  while (size < Math.max(2, count)) size *= 2;
+  const numRounds = Math.max(2, Math.round(Math.log2(size)));
+
+  const getRoundLabel = (idx) => {
+    if (idx === numRounds - 1) return `Round ${idx + 1} (Final)`;
+    if (idx === numRounds - 2) return `Round ${idx + 1} (Semi-Finals)`;
+    if (idx === numRounds - 3) return `Round ${idx + 1} (Quarter-Finals)`;
+    return `Round ${idx + 1}`;
+  };
+
+  const currentFrom = parseInt(fromSel.value, 10) || 0;
+  const currentTo = parseInt(toSel.value, 10) || 0;
+  const currentReEntry = parseInt(reEntrySel.value, 10) || 1;
+
+  fromSel.innerHTML = "";
+  for (let i = 0; i < numRounds - 1; i++) {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = getRoundLabel(i);
+    if (i === currentFrom) opt.selected = true;
+    fromSel.appendChild(opt);
+  }
+
+  const selectedFrom = parseInt(fromSel.value, 10) || 0;
+  toSel.innerHTML = "";
+  for (let i = selectedFrom; i < numRounds - 1; i++) {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = getRoundLabel(i);
+    if (i === Math.max(selectedFrom, currentTo)) opt.selected = true;
+    toSel.appendChild(opt);
+  }
+
+  const selectedTo = parseInt(toSel.value, 10) || 0;
+  reEntrySel.innerHTML = "";
+  for (let i = selectedTo + 1; i < numRounds; i++) {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = getRoundLabel(i);
+    if (i === Math.max(selectedTo + 1, currentReEntry)) opt.selected = true;
+    reEntrySel.appendChild(opt);
+  }
 };
 
 App.downloadCSV = function() {
@@ -239,6 +340,7 @@ App.initTournamentUI = function() {
       App.registeredPlayers.push(name);
       input.value = "";
       App.renderPlayerTags();
+      App.updateRepechageRoundOptions();
     }
   });
 
@@ -252,13 +354,36 @@ App.initTournamentUI = function() {
       [App.registeredPlayers[i], App.registeredPlayers[j]] = [App.registeredPlayers[j], App.registeredPlayers[i]];
     }
     App.renderPlayerTags();
+    App.updateRepechageRoundOptions();
   });
 
   document.querySelectorAll("input[name='tourney-format']").forEach(radio => {
     radio.addEventListener("change", (e) => {
-      document.getElementById("tourney-groups-config").style.display = e.target.value === "groups" ? "grid" : "none";
+      const isGroups = e.target.value === "groups";
+      document.getElementById("tourney-groups-config").style.display = isGroups ? "grid" : "none";
+      const koConfig = document.getElementById("tourney-knockout-config");
+      if (koConfig) koConfig.style.display = isGroups ? "none" : "block";
+      if (!isGroups) App.updateRepechageRoundOptions();
     });
   });
+
+  const repToggle = document.getElementById("tourney-repechage-toggle");
+  if (repToggle) {
+    repToggle.addEventListener("change", (e) => {
+      const repOptions = document.getElementById("tourney-repechage-options");
+      if (repOptions) repOptions.style.display = e.target.checked ? "block" : "none";
+      if (e.target.checked) App.updateRepechageRoundOptions();
+    });
+  }
+
+  const fromSel = document.getElementById("tourney-rep-from-round");
+  const toSel = document.getElementById("tourney-rep-to-round");
+  if (fromSel) {
+    fromSel.addEventListener("change", () => App.updateRepechageRoundOptions());
+  }
+  if (toSel) {
+    toSel.addEventListener("change", () => App.updateRepechageRoundOptions());
+  }
 
   const tourneyBullToggle = document.getElementById("tourney-bull-off-toggle");
   document.getElementById("btn-create-tourney-start").addEventListener("click", () => {
@@ -272,6 +397,19 @@ App.initTournamentUI = function() {
     const tBullOff = tourneyBullToggle && tourneyBullToggle.checked;
     const tBullRounds = tBullOff ? (parseInt(document.getElementById("tourney-bull-off-rounds").value, 10) || 15) : 0;
 
+    const isDirectKnockout = format === "direct_knockout";
+    const repActive = isDirectKnockout && repToggle && repToggle.checked;
+    const bronzeToggle = document.getElementById("tourney-bronze-toggle");
+
+    const repechageConfig = {
+      enabled: repActive,
+      fromRound: parseInt(document.getElementById("tourney-rep-from-round")?.value, 10) || 0,
+      toRound: parseInt(document.getElementById("tourney-rep-to-round")?.value, 10) || 0,
+      reEntryRound: parseInt(document.getElementById("tourney-rep-reentry-round")?.value, 10) || 1
+    };
+
+    const enableBronzeMatch = bronzeToggle ? bronzeToggle.checked : true;
+
     App.activeTournament = new Tournament({
       name: "Darts Championship",
       format,
@@ -282,7 +420,9 @@ App.initTournamentUI = function() {
       legsToWin,
       doubleOut,
       trackDoubles: true,
-      bullOffAfterRounds: tBullRounds
+      bullOffAfterRounds: tBullRounds,
+      repechageConfig,
+      enableBronzeMatch
     });
 
     App.activeTournament.start();

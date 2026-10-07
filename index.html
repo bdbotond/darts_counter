@@ -317,6 +317,41 @@
             </div>
           </div>
 
+          <div id="tourney-knockout-config" style="display: none; margin-bottom: 1rem;">
+            <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0;">
+                  <input type="checkbox" id="tourney-repechage-toggle" style="width: 18px; height: 18px;">
+                  <strong style="color: var(--accent-gold);">Enable Repechage (Second Chance Bracket)</strong>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0;">
+                  <input type="checkbox" id="tourney-bronze-toggle" checked style="width: 18px; height: 18px;">
+                  <span>🥉 Play 3rd Place Match (Bronze Medal)</span>
+                </label>
+              </div>
+
+              <div id="tourney-repechage-options" style="display: none; padding-top: 0.75rem; border-top: 1px solid var(--border-color); margin-top: 0.5rem;">
+                <div class="form-row">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="tourney-rep-from-round" style="font-size: 0.85rem;">Eligible Losers From</label>
+                    <select id="tourney-rep-from-round" class="form-control"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="tourney-rep-to-round" style="font-size: 0.85rem;">Eligible Losers To</label>
+                    <select id="tourney-rep-to-round" class="form-control"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="tourney-rep-reentry-round" style="font-size: 0.85rem;">Re-entry Round in Main Tree</label>
+                    <select id="tourney-rep-reentry-round" class="form-control"></select>
+                  </div>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+                  Defeated players from selected rounds play in the repechage tree. Winners re-enter the main knockout tree at the chosen round!
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="form-group">
             <label><strong>3. Game Rules for Matches</strong></label>
             <div class="form-row">
@@ -384,6 +419,16 @@
         <div id="tourney-bracket-container" class="card" style="display: none;">
           <h3 style="margin-bottom: 1rem;">🌳 Knockout Bracket Tree</h3>
           <div class="bracket-container" id="bracket-tree-view"></div>
+        </div>
+
+        <div id="tourney-repechage-container" class="card" style="display: none; margin-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="margin-bottom: 0;">🎯 Repechage (Second Chance) Bracket</h3>
+            <span class="group-badge" id="rep-status-badge" style="color: var(--accent-gold); background: rgba(227, 179, 65, 0.15);">
+              ACTIVE
+            </span>
+          </div>
+          <div class="bracket-container" id="repechage-tree-view"></div>
         </div>
       </section>
     </main>

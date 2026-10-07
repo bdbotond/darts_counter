@@ -56,15 +56,27 @@ App.promptMatchStarter = function(config) {
 
 App.launchTournamentFixture = function(matchId) {
   let match = null;
-  for (const g of App.activeTournament.groups) {
-    match = g.matches.find(m => m.id === matchId);
-    if (match) break;
+  if (!App.activeTournament) return;
+  if (App.activeTournament.groups) {
+    for (const g of App.activeTournament.groups) {
+      match = g.matches.find(m => m.id === matchId);
+      if (match) break;
+    }
   }
-  if (!match) {
+  if (!match && App.activeTournament.knockoutRounds) {
     for (const r of App.activeTournament.knockoutRounds) {
       match = r.find(m => m.id === matchId);
       if (match) break;
     }
+  }
+  if (!match && App.activeTournament.repechageRounds) {
+    for (const r of App.activeTournament.repechageRounds) {
+      match = r.find(m => m.id === matchId);
+      if (match) break;
+    }
+  }
+  if (!match && App.activeTournament.bronzeMatch && App.activeTournament.bronzeMatch.id === matchId) {
+    match = App.activeTournament.bronzeMatch;
   }
   if (!match) return;
 
