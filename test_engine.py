@@ -526,6 +526,171 @@ def test_audit_fixes_match_and_tournament():
     res = subprocess.run(["node", "-e", node_test_script], capture_output=True, text=True)
     assert res.returncode == 0, f"Audit fixes test failed: {res.stderr}"
 
+def test_checkout_table_and_matchplay_deep_audit():
+    import subprocess
+    with open("index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+    assert "--border-color" not in html, "Undefined --border-color CSS variable found in index.html"
+    assert 'src="logo.png"' not in html, "Broken 404 logo.png reference found in index.html"
+
+    node_test_script = """
+    const fs = require('fs');
+    const window = {};
+    eval(fs.readFileSync('js/engine/checkouts.js', 'utf8'));
+    eval(fs.readFileSync('js/engine/match.js', 'utf8'));
+    eval(fs.readFileSync('js/engine/tournament.js', 'utf8'));
+
+    // 1. Mathematically verify EVERY entry in CHECKOUT_TABLE sums to its key and ends on a valid double
+    function parseDart(token) {
+      if (token === 'Bull') return { pts: 50, isDouble: true };
+      if (token === '25') return { pts: 25, isDouble: false };
+      if (token.startsWith('T')) {
+        const n = parseInt(token.slice(1), 10);
+        if (n < 1 || n > 20) throw new Error('Invalid triple: ' + token);
+        return { pts: n * 3, isDouble: false };
+      }
+      if (token.startsWith('D')) {
+        const n = parseInt(token.slice(1), 10);
+        if (n < 1 || n > 20) throw new Error('Invalid double: ' + token);
+        return { pts: n * 2, isDouble: true };
+      }
+      const n = parseInt(token, 10);
+      if (n < 1 || n > 20) throw new Error('Invalid single: ' + token);
+      return { pts: n, isDouble: false };
+    }
+
+    for (const [scoreStr, formula] of Object.entries(window.CHECKOUT_TABLE)) {
+      const target = parseInt(scoreStr, 10);
+      const parts = formula.trim().split(/\\s+/);
+      if (parts.length < 1 || parts.length > 3) throw new Error(`Invalid dart count for ${target}: ${formula}`);
+      const parsed = parts.map(parseDart);
+      const sum = parsed.reduce((acc, d) => acc + d.pts, 0);
+      if (sum !== target) throw new Error(`Checkout sum mismatch for ${target}: got ${sum} from ${formula}`);
+      if (!parsed[parsed.length - 1].isDouble) throw new Error(`Checkout for ${target} does not end on double: ${formula}`);
+    }
+
+    // 2. Single-out checkout & impossible 3-dart score checks
+    if (window.getCheckout(0, false) !== '') throw new Error('Score 0 should return empty checkout');
+    if (window.getCheckout(25, false) !== '25') throw new Error('Single out 25 should be 25');
+    if (window.getCheckout(180, false) !== 'T20 T20 T20') throw new Error('Single out 180 should be T20 T20 T20');
+    if (window.isFinishPossible(179, false)) throw new Error('179 is impossible in 3 darts');
+    if (window.isFinishPossible(0, false)) throw new Error('0 is not a finishable score');
+
+    // 3. Keypad double-attempts accuracy (hitting D20 at 501 is NOT a checkout attempt; missing at 40 IS)
+    const mKey = new window.DartsMatch({ startingScore: 501, legsToWin: 2, doubleOut: true });
+    mKey.recordVisit({
+      score: 40,
+      dartsCount: 3,
+      dartBreakdown: [
+        { score: 40, isDouble: true, label: 'D20' },
+        { score: 0, isDouble: false, label: 'Miss' },
+        { score: 0, isDouble: false, label: 'Miss' }
+      ]
+    });
+    if (mKey.getPlayerStats(0).doubleAttempts !== 0) {
+      throw new Error('D20 at 501 should not count as checkout double attempt');
+    }
+
+    // 4. Multi-round cascade reset and stats registry cleanup on replay
+    const t8 = new window.Tournament({
+      name: '8-Player Cascade Test',
+      format: 'direct_knockout',
+      players: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'],
+      legsToWin: 2,
+      seedBracket: false
+    });
+    t8.start();
+    // Play QF1 (P1 beats P2), QF2 (P3 beats P4), SF1 (P1 beats P3)
+    t8.recordMatchResult('ko_r1_m1', { winner: 'P1', legsP1: 2, legsP2: 0, p1Stats: { name: 'P1', legsWon: 2, legsLost: 0 }, p2Stats: { name: 'P2', legsWon: 0, legsLost: 2 } });
+    t8.recordMatchResult('ko_r1_m2', { winner: 'P3', legsP1: 2, legsP2: 0, p1Stats: { name: 'P3', legsWon: 2, legsLost: 0 }, p2Stats: { name: 'P4', legsWon: 0, legsLost: 2 } });
+    t8.recordMatchResult('ko_r2_m1', { winner: 'P1', legsP1: 2, legsP2: 0, p1Stats: { name: 'P1', legsWon: 2, legsLost: 0 }, p2Stats: { name: 'P3', legsWon: 0, legsLost: 2 } });
+    if (t8.knockoutRounds[2][0].player1 !== 'P1') throw new Error('Final should have P1 before replay');
+
+    // Now replay QF1: P2 beats P1! SF1 must reset AND Final slot 1 must clear to null!
+    t8.recordMatchResult('ko_r1_m1', { winner: 'P2', legsP1: 0, legsP2: 2, p1Stats: { name: 'P1', legsWon: 0, legsLost: 2 }, p2Stats: { name: 'P2', legsWon: 2, legsLost: 0 } });
+    if (t8.knockoutRounds[1][0].isFinished) throw new Error('SF1 should be reset');
+    if (t8.knockoutRounds[2][0].player1 !== null) throw new Error('Final player1 must cascade-clear to null, got: ' + t8.knockoutRounds[2][0].player1);
+    if (t8.matchStatsRegistry['ko_r2_m1']) throw new Error('Invalidated SF1 stats should be removed from registry');
+    """
+    res = subprocess.run(["node", "-e", node_test_script], capture_output=True, text=True)
+    assert res.returncode == 0, f"Deep audit test failed: {res.stderr}"
+
+def test_server_and_mobile_remote():
+    import urllib.request
+    import json
+    import threading
+    from http.server import ThreadingHTTPServer
+    import server
+
+    # 1. Test IP discovery
+    ips = server.get_local_ip_addresses()
+    assert isinstance(ips, list) and len(ips) > 0, "Should detect at least 1 local IP address"
+
+    # 2. Test pure-python QR code generator
+    qr_svg = server.MiniQR.to_svg("http://192.168.1.50:8000/?screen=remote")
+    assert "<svg" in qr_svg and "</svg>" in qr_svg, "MiniQR should return valid SVG root"
+    assert 'xmlns="http://www.w3.org/2000/svg"' in qr_svg
+    assert "<rect" in qr_svg, "MiniQR SVG should contain module rectangles"
+
+    # 3. Test HTTP server endpoints on ephemeral port
+    test_port = 18765
+    server_address = ("127.0.0.1", test_port)
+    httpd = ThreadingHTTPServer(server_address, server.DartsHTTPRequestHandler)
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+
+    try:
+        # GET /api/info
+        info_req = urllib.request.urlopen(f"http://127.0.0.1:{test_port}/api/info")
+        assert info_req.status == 200
+        assert info_req.headers.get("Access-Control-Allow-Private-Network") == "true"
+        assert info_req.headers.get("Access-Control-Allow-Origin") == "*"
+        info_data = json.loads(info_req.read().decode())
+        assert "ips" in info_data and "urls" in info_data
+        assert any("?screen=remote" in u for u in info_data["urls"])
+
+        # OPTIONS preflight
+        opt_req = urllib.request.Request(f"http://127.0.0.1:{test_port}/api/info", method="OPTIONS")
+        opt_resp = urllib.request.urlopen(opt_req)
+        assert opt_resp.status == 204
+        assert opt_resp.headers.get("Access-Control-Allow-Private-Network") == "true"
+
+        # GET /api/qr
+        qr_req = urllib.request.urlopen(f"http://127.0.0.1:{test_port}/api/qr?data=hello")
+        assert qr_req.status == 200
+        assert qr_req.headers.get("Content-Type") == "image/svg+xml"
+        assert qr_req.headers.get("Access-Control-Allow-Private-Network") == "true"
+        body = qr_req.read().decode()
+        assert "<svg" in body
+
+        # POST /api/message (GAME_STATE)
+        state_payload = {"type": "GAME_STATE", "payload": {"id": "m123", "player1": "Alice", "player2": "Bob", "scores": [501, 501]}}
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{test_port}/api/message",
+            data=json.dumps(state_payload).encode(),
+            headers={"Content-Type": "application/json"}
+        )
+        post_resp = urllib.request.urlopen(req)
+        assert post_resp.status == 200
+        assert post_resp.headers.get("Access-Control-Allow-Private-Network") == "true"
+        post_data = json.loads(post_resp.read().decode())
+        assert post_data.get("status") == "ok"
+        assert server.hub.latest_state["id"] == "m123"
+
+        # POST /api/message (REMOTE_ACTION)
+        action_payload = {"type": "REMOTE_ACTION", "payload": {"type": "VISIT", "score": 100}}
+        req2 = urllib.request.Request(
+            f"http://127.0.0.1:{test_port}/api/message",
+            data=json.dumps(action_payload).encode(),
+            headers={"Content-Type": "application/json"}
+        )
+        post_resp2 = urllib.request.urlopen(req2)
+        assert post_resp2.status == 200
+
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
 if __name__ == "__main__":
     test_x01_bust_and_checkout()
     test_impossible_checkout_validation()
@@ -542,7 +707,10 @@ if __name__ == "__main__":
     test_repechage_and_bronze_tournament_engine()
     test_universal_repechage_even_odd_players()
     test_audit_fixes_match_and_tournament()
-    print("ALL TESTS PASSED: 15/15 checks verified successfully.")
+    test_checkout_table_and_matchplay_deep_audit()
+    test_server_and_mobile_remote()
+    print("ALL TESTS PASSED: 17/17 checks verified successfully.")
+
 
 
 

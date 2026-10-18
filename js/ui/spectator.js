@@ -11,7 +11,11 @@ App.initSpectator = function() {
   const board = document.getElementById("spectator-scoreboard-main");
 
   sync.onState((state) => {
-    if (!state) return;
+    if (!state || !state.id || state.active === false) {
+      waiting.style.display = "flex";
+      board.style.display = "none";
+      return;
+    }
     waiting.style.display = "none";
     board.style.display = "grid";
 
@@ -28,10 +32,16 @@ App.initSpectator = function() {
     document.getElementById("sp-p1-avg").textContent = state.p1Stats ? state.p1Stats.threeDartAvg : "0.00";
     document.getElementById("sp-p2-avg").textContent = state.p2Stats ? state.p2Stats.threeDartAvg : "0.00";
 
-    if (state.lastVisit) {
+    if ("p1LastVisit" in state || "p2LastVisit" in state) {
+      document.getElementById("sp-p1-last").textContent = state.p1LastVisit ? (state.p1LastVisit.bust ? "BUST" : state.p1LastVisit.score) : "-";
+      document.getElementById("sp-p2-last").textContent = state.p2LastVisit ? (state.p2LastVisit.bust ? "BUST" : state.p2LastVisit.score) : "-";
+    } else if (state.lastVisit) {
       const val = state.lastVisit.bust ? "BUST" : state.lastVisit.score;
       if (state.lastVisit.playerIndex === 0) document.getElementById("sp-p1-last").textContent = val;
       else document.getElementById("sp-p2-last").textContent = val;
+    } else {
+      document.getElementById("sp-p1-last").textContent = "-";
+      document.getElementById("sp-p2-last").textContent = "-";
     }
 
     if (state.isBullOffDue) {
@@ -49,6 +59,36 @@ App.initSpectator = function() {
   });
 
   sync.request();
+
+  // Load phone connect QR onto spectator waiting screen
+  const loadSpectatorQr = (base, data) => {
+    const urls = data.urls || [];
+    if (urls.length > 0) {
+      const qrBox = document.getElementById("sp-waiting-qr-box");
+      const qrImg = document.getElementById("sp-waiting-qr-img");
+      const hint = document.getElementById("sp-waiting-url-hint");
+      if (qrBox && qrImg) {
+        qrImg.src = `${base}/api/qr?data=${encodeURIComponent(urls[0])}`;
+        qrBox.style.display = "block";
+      }
+      if (hint) {
+        hint.textContent = `📱 Scan or visit: ${urls[0]}`;
+      }
+    }
+  };
+
+  if (window.SyncHub && typeof window.SyncHub.discoverServer === "function") {
+    window.SyncHub.discoverServer().then(base => {
+      if (base !== null && window.SyncHub._serverInfo) {
+        loadSpectatorQr(base, window.SyncHub._serverInfo);
+      }
+    }).catch(() => {});
+  } else {
+    fetch("/api/info")
+      .then(r => r.json())
+      .then(data => loadSpectatorQr("", data))
+      .catch(() => {});
+  }
 
   document.getElementById("btn-toggle-fullscreen").addEventListener("click", () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});

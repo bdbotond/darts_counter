@@ -188,12 +188,13 @@ App.evaluateBullOff = function() {
     msg.textContent = "Throw for both players to determine result:";
     return;
   }
+  const esc = App.escapeHtml || (s => s);
   if (boThrows.p1 > boThrows.p2) {
-    msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${App.activeMatch.player1}</strong> won the Bull-off!`;
+    msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${esc(App.activeMatch.player1)}</strong> won the Bull-off!`;
     if (btnP1) btnP1.classList.add("btn-gold");
     if (btnMatchP1) btnMatchP1.classList.add("btn-gold");
   } else if (boThrows.p2 > boThrows.p1) {
-    msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${App.activeMatch.player2}</strong> won the Bull-off!`;
+    msg.innerHTML = `🏆 <strong style="color:var(--accent-gold);">${esc(App.activeMatch.player2)}</strong> won the Bull-off!`;
     if (btnP2) btnP2.classList.add("btn-gold");
     if (btnMatchP2) btnMatchP2.classList.add("btn-gold");
   } else {
@@ -222,21 +223,24 @@ App.resolveBullOffWinner = function(winnerIndex, decideEntireMatch = false) {
 
 App.openMidTournamentStats = function() {
   if (!App.activeTournament) return;
+  const esc = App.escapeHtml || (s => s);
   const stats = App.activeTournament.getOverallPlayerStats();
   const tbody = document.getElementById("tbody-player-stats");
   tbody.innerHTML = "";
+  const frag = document.createDocumentFragment();
   stats.forEach(s => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><strong>${s.player}</strong></td>
+      <td><strong>${esc(s.player)}</strong></td>
       <td>${s.matchesPlayed}</td><td>${s.matchesWon}</td><td>${s.matchesLost}</td>
       <td>${s.winPct}%</td><td>${s.legsWon} - ${s.legsLost}</td>
       <td><strong>${s.threeDartAvg}</strong></td><td>${s.checkoutPct}%</td>
       <td>${s.doubleHits} / ${s.doubleAttempts}</td><td>${s.count180}</td>
       <td>${s.count140}</td><td>${s.count100}</td><td>${s.highestCheckout || "-"}</td>
     `;
-    tbody.appendChild(tr);
+    frag.appendChild(tr);
   });
+  tbody.appendChild(frag);
   document.getElementById("modal-stats").style.display = "flex";
 };
 
@@ -256,6 +260,7 @@ App.initModals = function() {
     if (!App.pendingTournamentMatch) return;
     const match = App.pendingTournamentMatch;
     App.currentTournamentMatch = match;
+    App.pendingTournamentMatch = null;
 
     const startingScore = parseInt(document.getElementById("tms-game-type").value, 10) || 501;
     const legsToWin = parseInt(document.getElementById("tms-legs-to-win").value, 10) || 2;
@@ -286,18 +291,28 @@ App.initModals = function() {
   document.getElementById("btn-tms-save-manual").addEventListener("click", () => {
     if (!App.pendingTournamentMatch || !App.activeTournament) return;
     const match = App.pendingTournamentMatch;
-    const legsP1 = parseInt(document.getElementById("tms-manual-legs-p1").value, 10) || 0;
-    const legsP2 = parseInt(document.getElementById("tms-manual-legs-p2").value, 10) || 0;
+    const legsP1 = Math.max(0, parseInt(document.getElementById("tms-manual-legs-p1").value, 10) || 0);
+    const legsP2 = Math.max(0, parseInt(document.getElementById("tms-manual-legs-p2").value, 10) || 0);
     const winnerOpt = document.getElementById("tms-manual-winner").value;
+    const isGroupMatch = match.stage === "group" || !match.stage;
 
     let winner = null;
     if (winnerOpt === "p1") winner = match.player1;
     else if (winnerOpt === "p2") winner = match.player2;
-    else if (winnerOpt === "draw") winner = "Draw";
-    else {
+    else if (winnerOpt === "draw") {
+      if (!isGroupMatch) {
+        alert("Knockout matches cannot end in a draw.");
+        return;
+      }
+      winner = "Draw";
+    } else {
       if (legsP1 > legsP2) winner = match.player1;
       else if (legsP2 > legsP1) winner = match.player2;
-      else winner = (match.stage === "group" || !match.stage) ? "Draw" : match.player1;
+      else if (isGroupMatch) winner = "Draw";
+      else {
+        alert("Knockout matches require a winner. Please enter non-tied legs or select the winner.");
+        return;
+      }
     }
 
     const p1Stats = {

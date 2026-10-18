@@ -13,8 +13,7 @@
     <!-- Header with Logo & Buy Me a Coffee -->
     <header class="app-header">
       <div class="brand">
-        <img src="logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none'; document.getElementById('header-logo-fallback').style.display='inline-block';">
-        <svg id="header-logo-fallback" class="logo-fallback" viewBox="0 0 24 24" style="display:none;">
+        <svg id="header-logo-fallback" class="logo-fallback" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
           <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
           <circle cx="12" cy="12" r="2" fill="currentColor"/>
@@ -22,9 +21,7 @@
         <h1 class="app-title">Darts Counter & Tournament</h1>
       </div>
       <div class="header-right">
-        <a href="https://buymeacoffee.com/bdbotond" target="_blank" rel="noopener noreferrer" class="bmac-link" title="Support creator on Buy Me a Coffee">
-          <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
-        </a>
+        <a href="https://buymeacoffee.com/bdbotond" target="_blank" rel="noopener noreferrer" class="bmac-link" title="Support creator on Buy Me a Coffee">☕ Buy Me a Coffee</a>
       </div>
     </header>
 
@@ -33,6 +30,7 @@
       <button class="nav-btn active" id="nav-home">Home</button>
       <button class="nav-btn" id="nav-quick-match">Play Match</button>
       <button class="nav-btn" id="nav-tournament">Tournament Organizer</button>
+      <button class="nav-btn" id="nav-connect-phone">📱 Connect Phone</button>
       <button class="nav-btn" id="nav-tourney-stats" style="display: none; margin-left: auto;">📊 Mid-Tournament Stats</button>
     </nav>
 
@@ -55,6 +53,14 @@
               <p>Group stages with round-robin tables, automatic standings, knockout playoff trees, mid-tournament stats, and CSV export.</p>
             </div>
             <button class="btn btn-gold btn-lg" id="btn-start-tourney-setup">Create Tournament</button>
+          </div>
+
+          <div class="welcome-card">
+            <div>
+              <h3>📱 Connect Phone Remote</h3>
+              <p>Connect your smartphone over Wi-Fi, Hotspot, or Bluetooth to enter scores directly from the oche with a touch keypad.</p>
+            </div>
+            <button class="btn btn-blue btn-lg" id="btn-home-connect-phone">📱 Show Phone QR</button>
           </div>
         </div>
       </section>
@@ -144,7 +150,8 @@
             <span class="btn btn-secondary btn-sm" id="scorer-round-badge" style="color: var(--accent-gold);">Round 1</span>
             <span id="tournament-context-badge" class="btn btn-gold btn-sm" style="display: none;">Group Match</span>
           </div>
-          <div style="display: flex; gap: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-primary btn-sm" id="btn-open-connect-phone">📱 Connect Phone</button>
             <button class="btn btn-blue btn-sm" id="btn-open-second-screen">📺 Open Second Screen</button>
             <button class="btn btn-secondary btn-sm" id="btn-exit-match">Exit Match</button>
           </div>
@@ -318,7 +325,7 @@
           </div>
 
           <div id="tourney-knockout-config" style="display: none; margin-bottom: 1rem;">
-            <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1rem;">
+            <div class="card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 1rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem;">
                 <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0;">
                   <input type="checkbox" id="tourney-repechage-toggle" style="width: 18px; height: 18px;">
@@ -330,7 +337,7 @@
                 </label>
               </div>
 
-              <div id="tourney-repechage-options" style="display: none; padding-top: 0.75rem; border-top: 1px solid var(--border-color); margin-top: 0.5rem;">
+              <div id="tourney-repechage-options" style="display: none; padding-top: 0.75rem; border-top: 1px solid var(--border); margin-top: 0.5rem;">
                 <div class="form-row">
                   <div class="form-group" style="margin-bottom: 0;">
                     <label for="tourney-rep-from-round" style="font-size: 0.85rem;">Eligible Losers From</label>
@@ -446,9 +453,7 @@
         <h1 class="app-title" style="font-size: 1.8rem;">Darts Scoreboard Live</h1>
       </div>
       <div class="header-right">
-        <a href="https://buymeacoffee.com/bdbotond" target="_blank" rel="noopener noreferrer" class="bmac-link">
-          <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
-        </a>
+        <a href="https://buymeacoffee.com/bdbotond" target="_blank" rel="noopener noreferrer" class="bmac-link">☕ Buy Me a Coffee</a>
       </div>
     </header>
 
@@ -460,6 +465,10 @@
       </svg>
       <div>Waiting for active match on main screen...</div>
       <div style="font-size: 1rem;">Scores will sync here automatically in real time.</div>
+      <div id="sp-waiting-qr-box" style="background: #fff; padding: 0.75rem; border-radius: 12px; margin-top: 1rem; display: none;">
+        <img id="sp-waiting-qr-img" src="" alt="Scan QR Code" style="width: 150px; height: 150px; display: block;">
+      </div>
+      <div id="sp-waiting-url-hint" style="font-size: 0.95rem; color: var(--accent-gold); margin-top: 0.5rem;"></div>
     </div>
 
     <main id="spectator-scoreboard-main" class="display-main" style="display: none;">
@@ -489,6 +498,180 @@
     </main>
 
     <button class="btn btn-secondary fs-toggle-btn" id="btn-toggle-fullscreen">⛶ Fullscreen</button>
+  </div>
+
+  <!-- ==================== MOBILE REMOTE SCORER SCREEN ==================== -->
+  <div id="remote-screen" style="display: none;">
+    <!-- Waiting for match screen -->
+    <div id="remote-waiting" class="remote-waiting-wrap">
+      <div class="remote-waiting-box">
+        <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">🎯</div>
+        <h3>Waiting for Active Match</h3>
+        <p>Start a quick match or tournament fixture on your computer to score from your phone.</p>
+        <div class="remote-waiting-pulse">Ready & Connected</div>
+      </div>
+    </div>
+
+    <!-- Active remote content -->
+    <div id="remote-active-content" class="remote-content-wrap" style="display: none;">
+      <!-- Compact Scoreboard Header -->
+      <div class="remote-score-header">
+        <div class="rem-player-box active-turn" id="rem-p1-box" title="Tap to set as starter before throwing">
+          <div class="rem-player-name" id="rem-p1-name">Player 1</div>
+          <div class="rem-score" id="rem-p1-score">501</div>
+          <div class="rem-legs-badge" id="rem-p1-legs">0 / 3</div>
+          <div class="rem-checkout" id="rem-p1-checkout"></div>
+        </div>
+        <div class="rem-player-box" id="rem-p2-box" title="Tap to set as starter before throwing">
+          <div class="rem-player-name" id="rem-p2-name">Player 2</div>
+          <div class="rem-score" id="rem-p2-score">501</div>
+          <div class="rem-legs-badge" id="rem-p2-legs">0 / 3</div>
+          <div class="rem-checkout" id="rem-p2-checkout"></div>
+        </div>
+      </div>
+
+      <div class="rem-turn-bar">
+        <span id="rem-turn-indicator" class="rem-turn-indicator">Player 1's Turn</span>
+        <button class="btn btn-secondary btn-sm" id="rem-btn-undo">↩ Undo</button>
+      </div>
+
+      <!-- Mode selector tabs -->
+      <div class="rem-mode-tabs">
+        <button class="rem-mode-tab active" id="rem-tab-numpad">🔢 Touch Numpad</button>
+        <button class="rem-mode-tab" id="rem-tab-keypad">🎯 3-Dart Keypad</button>
+      </div>
+
+      <!-- VIEW 1: Touch Calculator Numpad -->
+      <div id="rem-view-numpad" class="rem-numpad-view">
+        <!-- Darts at double prompt (shown when on finish) -->
+        <div id="rem-double-prompt" class="rem-double-bar" style="display: none;">
+          <span style="font-size: 0.85rem;">🎯 Darts at double:</span>
+          <div class="rem-dbl-buttons">
+            <button class="rem-dbl-btn selected" data-count="0">0</button>
+            <button class="rem-dbl-btn" data-count="1">1</button>
+            <button class="rem-dbl-btn" data-count="2">2</button>
+            <button class="rem-dbl-btn" data-count="3">3</button>
+          </div>
+          <select id="rem-darts-count" class="form-control" style="width: auto; padding: 2px 6px; font-size: 0.8rem;">
+            <option value="3" selected>3 darts</option>
+            <option value="2">2 darts</option>
+            <option value="1">1 dart</option>
+          </select>
+        </div>
+
+        <!-- Score Input Strip -->
+        <div class="rem-input-strip">
+          <div class="rem-score-value placeholder" id="rem-score-display">0</div>
+          <button class="rem-act-btn" id="rem-btn-backspace" title="Backspace">⌫</button>
+          <button class="rem-act-btn" id="rem-btn-clear" title="Clear">C</button>
+        </div>
+
+        <!-- Calculator & Common scores layout -->
+        <div class="rem-numpad-grid">
+          <button class="rem-num-btn" data-digit="1">1</button>
+          <button class="rem-num-btn" data-digit="2">2</button>
+          <button class="rem-num-btn" data-digit="3">3</button>
+          <button class="rem-common-btn" data-score="60">60</button>
+          <button class="rem-common-btn" data-score="100">100</button>
+
+          <button class="rem-num-btn" data-digit="4">4</button>
+          <button class="rem-num-btn" data-digit="5">5</button>
+          <button class="rem-num-btn" data-digit="6">6</button>
+          <button class="rem-common-btn" data-score="81">81</button>
+          <button class="rem-common-btn" data-score="140">140</button>
+
+          <button class="rem-num-btn" data-digit="7">7</button>
+          <button class="rem-num-btn" data-digit="8">8</button>
+          <button class="rem-num-btn" data-digit="9">9</button>
+          <button class="rem-common-btn" data-score="85">85</button>
+          <button class="rem-common-btn rem-gold-btn" data-score="180">180</button>
+
+          <button class="rem-common-btn rem-bust-btn" id="rem-btn-bust">BUST</button>
+          <button class="rem-num-btn" data-digit="0">0</button>
+          <button class="rem-common-btn" data-score="26">26</button>
+          <button class="rem-common-btn" data-score="41">41</button>
+          <button class="rem-common-btn" data-score="45">45</button>
+        </div>
+
+        <button class="btn btn-primary btn-lg rem-submit-btn" id="rem-btn-submit">ENTER VISIT</button>
+      </div>
+
+      <!-- VIEW 2: 3-Dart Keypad -->
+      <div id="rem-view-keypad" class="rem-keypad-view" style="display: none;">
+        <div class="rem-slots-row">
+          <div class="rem-slot active" id="rem-slot-1">
+            <div class="rem-slot-lbl">Dart 1</div>
+            <div class="rem-slot-val" id="rem-slot-val-1">-</div>
+          </div>
+          <div class="rem-slot" id="rem-slot-2">
+            <div class="rem-slot-lbl">Dart 2</div>
+            <div class="rem-slot-val" id="rem-slot-val-2">-</div>
+          </div>
+          <div class="rem-slot" id="rem-slot-3">
+            <div class="rem-slot-lbl">Dart 3</div>
+            <div class="rem-slot-val" id="rem-slot-val-3">-</div>
+          </div>
+        </div>
+
+        <div class="rem-mult-row">
+          <button class="rem-mult-btn active" id="rem-mult-single">Single (1x)</button>
+          <button class="rem-mult-btn" id="rem-mult-double">Double (2x)</button>
+          <button class="rem-mult-btn" id="rem-mult-triple">Triple (3x)</button>
+        </div>
+
+        <div class="rem-targets-grid" id="rem-keypad-targets"></div>
+
+        <div class="rem-keypad-bottom">
+          <button class="btn btn-secondary btn-sm" id="rem-btn-clear-keypad">Clear</button>
+          <div style="font-weight: 700;">Total: <span id="rem-keypad-total" style="color: var(--accent-gold);">0</span></div>
+          <button class="btn btn-primary" id="rem-btn-submit-keypad">Submit</button>
+        </div>
+      </div>
+
+      <!-- OVERLAY: Bull-Off Decider -->
+      <div id="rem-bulloff-overlay" class="rem-overlay" style="display: none;">
+        <div class="rem-overlay-content">
+          <h3 style="color: var(--accent-gold); margin-bottom: 0.5rem;">🎯 ROUND LIMIT BULL-OFF</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Throw for Bullseye to decide leg:</p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+            <div>
+              <div id="rem-bo-p1-name" style="font-weight: 700; margin-bottom: 0.4rem;">P1</div>
+              <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                <button class="btn btn-secondary btn-sm rem-bo-p1-btn" data-val="0">Miss (0)</button>
+                <button class="btn btn-secondary btn-sm rem-bo-p1-btn" data-val="25">Outer (25)</button>
+                <button class="btn btn-secondary btn-sm rem-bo-p1-btn" data-val="50">Bull (50)</button>
+              </div>
+              <div style="margin-top: 0.4rem; font-size: 0.85rem;">Throw: <strong id="rem-bo-p1-val">-</strong></div>
+            </div>
+            <div>
+              <div id="rem-bo-p2-name" style="font-weight: 700; margin-bottom: 0.4rem;">P2</div>
+              <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                <button class="btn btn-secondary btn-sm rem-bo-p2-btn" data-val="0">Miss (0)</button>
+                <button class="btn btn-secondary btn-sm rem-bo-p2-btn" data-val="25">Outer (25)</button>
+                <button class="btn btn-secondary btn-sm rem-bo-p2-btn" data-val="50">Bull (50)</button>
+              </div>
+              <div style="margin-top: 0.4rem; font-size: 0.85rem;">Throw: <strong id="rem-bo-p2-val">-</strong></div>
+            </div>
+          </div>
+          <div id="rem-bo-status" style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--accent-gold);"></div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <button class="btn btn-primary" id="rem-btn-bo-leg-p1">Award Leg: P1</button>
+            <button class="btn btn-primary" id="rem-btn-bo-leg-p2">Award Leg: P2</button>
+            <button class="btn btn-gold btn-sm" id="rem-btn-bo-match-p1">🏆 Award Match: P1</button>
+            <button class="btn btn-gold btn-sm" id="rem-btn-bo-match-p2">🏆 Award Match: P2</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- OVERLAY: Match Finish -->
+      <div id="rem-finish-overlay" class="rem-overlay" style="display: none;">
+        <div class="rem-overlay-content" style="text-align: center;">
+          <h2 id="rem-finish-winner" style="color: var(--accent-gold); margin-bottom: 0.5rem;">🎉 MATCH FINISHED!</h2>
+          <div id="rem-finish-summary" style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1.5rem;">3 - 1</div>
+          <button class="btn btn-primary btn-lg" id="rem-btn-finish-ok" style="width: 100%;">Continue</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ==================== MODALS ==================== -->
@@ -716,6 +899,51 @@
     </div>
   </div>
 
+  <!-- MODAL: Connect Phone / Remote Scorer -->
+  <div id="modal-connect-phone" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 520px; text-align: center;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 0.5rem;">📱 Connect Phone / Remote Scorer</h3>
+        <button class="btn btn-secondary btn-sm" id="btn-close-connect-phone">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div id="phone-connect-online">
+          <div id="phone-file-protocol-tip" style="display: none; background: rgba(227, 179, 65, 0.12); border: 1px solid var(--accent-gold); border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 0.85rem; font-size: 0.85rem; color: #fff; text-align: left;">
+            💡 Opened via <code>file://</code>. Connected to local server! For fastest full-screen experience, you can also open <a href="http://localhost:8000" target="_blank" style="color: var(--accent-gold); font-weight: 700; text-decoration: underline;">http://localhost:8000</a> on this PC.
+          </div>
+          <p style="color: var(--text-muted); margin-bottom: 0.75rem; font-size: 0.95rem;">
+            Scan this QR code with your phone camera or open the address in your browser:
+          </p>
+          <div id="phone-qr-active-label" style="font-size: 0.9rem; font-family: monospace; font-weight: 700; color: var(--accent-gold); margin-bottom: 0.5rem; word-break: break-all;"></div>
+          <div style="background: #fff; padding: 1rem; border-radius: 12px; display: inline-block; margin-bottom: 1.25rem;">
+            <img id="phone-qr-img" src="" alt="Scan QR Code" style="width: 200px; height: 200px; display: block;">
+          </div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-align: left;">
+            Available addresses on this computer (Wi-Fi / Hotspot / Bluetooth):
+          </div>
+          <div id="phone-urls-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+        </div>
+        <div id="phone-connect-offline" style="display: none; padding: 1.25rem; text-align: left;">
+          <div style="color: var(--accent-gold); font-weight: 700; margin-bottom: 0.75rem; font-size: 1.05rem;">⚠️ Local Network Server Not Detected</div>
+          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.75rem;">
+            <strong>Step 1:</strong> Start the local Python server in your terminal:
+          </p>
+          <pre style="background: var(--bg-input); padding: 0.75rem; border-radius: 6px; font-size: 0.95rem; color: #fff; margin-bottom: 1rem; border: 1px solid var(--border);">python3 server.py</pre>
+          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.5rem;">
+            <strong>Step 2:</strong> Open Darts Counter in your computer's browser at:
+          </p>
+          <div style="background: var(--bg-input); padding: 0.65rem 0.85rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+            <a href="http://localhost:8000" target="_blank" style="color: var(--accent-gold); font-weight: 700; font-family: monospace; font-size: 1.05rem; text-decoration: underline;">http://localhost:8000</a>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">(click to open)</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.4;">
+            <em>Note: If you opened <code>index.html</code> directly as a local file (<code>file://</code>), opening <code>http://localhost:8000</code> above connects your browser to the server immediately.</em>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <!-- ==================== SCRIPTS ==================== -->
   <!-- Engine Modules -->
@@ -733,6 +961,7 @@
   <script src="js/ui/keypad.js"></script>
   <script src="js/ui/tournament.js"></script>
   <script src="js/ui/modals.js"></script>
+  <script src="js/ui/remote.js"></script>
 
   <!-- Bootstrap -->
   <script>

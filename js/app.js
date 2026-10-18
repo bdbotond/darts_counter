@@ -8,12 +8,33 @@ window.App = {
   views: null,
   navBtns: null,
 
+  escapeHtml: function(str) {
+    return String(str ?? "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  },
+
+  updateMatchInfoBadge: function(match) {
+    if (!match) return;
+    const starterName = match.startingPlayer === 1 ? match.player2 : match.player1;
+    let info = `${match.startingScore} ${match.doubleOut ? "Double Out" : "Single Out"} (First to ${match.legsToWin}) • ${starterName} starts`;
+    if (match.bullOffAfterRounds > 0) info += ` • Bull-off R${match.bullOffAfterRounds}`;
+    const badge = document.getElementById("match-info-badge");
+    if (badge) badge.textContent = info;
+  },
+
   showView: function(viewName) {
     Object.values(App.views).forEach(v => v.style.display = "none");
     Object.values(App.navBtns).forEach(b => b.classList.remove("active"));
     if (App.views[viewName]) App.views[viewName].style.display = "block";
 
-    if (viewName === "home") App.navBtns.home.classList.add("active");
+    if (viewName === "home") {
+      App.navBtns.home.classList.add("active");
+      const tourneyBtn = document.getElementById("btn-start-tourney-setup");
+      if (tourneyBtn) {
+        tourneyBtn.textContent = App.activeTournament ? "Continue Tournament" : "Create Tournament";
+      }
+    }
     else if (viewName === "matchSetup" || viewName === "scorer") App.navBtns.quickMatch.classList.add("active");
     else if (viewName === "tourneySetup" || viewName === "tourneyDash") App.navBtns.tournament.classList.add("active");
 
@@ -30,12 +51,94 @@ window.App = {
     }
   },
 
+  openConnectPhoneModal: function() {
+    const modal = document.getElementById("modal-connect-phone");
+    if (!modal) return;
+    modal.style.display = "flex";
+
+    const qrImg = document.getElementById("phone-qr-img");
+    const activeLabel = document.getElementById("phone-qr-active-label");
+    const urlsContainer = document.getElementById("phone-urls-list");
+    const offlineNotice = document.getElementById("phone-connect-offline");
+    const onlineContent = document.getElementById("phone-connect-online");
+    const fileTip = document.getElementById("phone-file-protocol-tip");
+
+    function renderWithBase(base, data) {
+      if (offlineNotice) offlineNotice.style.display = "none";
+      if (onlineContent) onlineContent.style.display = "block";
+      if (fileTip) {
+        fileTip.style.display = (window.location && window.location.protocol === "file:") ? "block" : "none";
+      }
+
+      function setActiveUrl(url) {
+        if (qrImg) qrImg.src = `${base}/api/qr?data=${encodeURIComponent(url)}`;
+        if (activeLabel) activeLabel.textContent = `Active QR: ${url}`;
+        if (urlsContainer) {
+          urlsContainer.querySelectorAll(".phone-url-row").forEach(r => {
+            if (r.dataset.url === url) r.classList.add("active-url-row");
+            else r.classList.remove("active-url-row");
+          });
+        }
+      }
+
+      const urls = data.urls || [`http://localhost:${data.port || 8000}/?screen=remote`];
+      setActiveUrl(urls[0]);
+
+      if (urlsContainer) {
+        urlsContainer.innerHTML = "";
+        urls.forEach(u => {
+          const row = document.createElement("div");
+          row.className = "phone-url-row" + (u === urls[0] ? " active-url-row" : "");
+          row.dataset.url = u;
+          row.innerHTML = `
+            <div style="flex:1; cursor:pointer;" class="phone-url-select" title="Click to display this QR code">
+              <a href="${u}" target="_blank" class="phone-url-link">${u}</a>
+            </div>
+            <button class="btn btn-primary btn-sm btn-select-qr" style="padding: 0.2rem 0.6rem; font-size: 0.8rem;">Show QR</button>
+            <button class="btn btn-secondary btn-sm btn-copy-url" data-url="${u}" style="padding: 0.2rem 0.6rem; font-size: 0.8rem;">📋 Copy</button>
+          `;
+          const copyBtn = row.querySelector(".btn-copy-url");
+          copyBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(u).then(() => {
+              copyBtn.textContent = "✓ Copied!";
+              setTimeout(() => copyBtn.textContent = "📋 Copy", 1500);
+            }).catch(() => {});
+          });
+          const selBtn = row.querySelector(".btn-select-qr");
+          selBtn.addEventListener("click", () => setActiveUrl(u));
+          row.querySelector(".phone-url-select").addEventListener("click", () => setActiveUrl(u));
+          urlsContainer.appendChild(row);
+        });
+      }
+    }
+
+    if (window.SyncHub && typeof window.SyncHub.discoverServer === "function") {
+      window.SyncHub.discoverServer(true).then(base => {
+        if (base !== null && window.SyncHub._serverInfo) {
+          renderWithBase(base, window.SyncHub._serverInfo);
+        } else {
+          if (onlineContent) onlineContent.style.display = "none";
+          if (offlineNotice) offlineNotice.style.display = "block";
+        }
+      }).catch(() => {
+        if (onlineContent) onlineContent.style.display = "none";
+        if (offlineNotice) offlineNotice.style.display = "block";
+      });
+    } else {
+      fetch("/api/info")
+        .then(r => r.json())
+        .then(data => renderWithBase("", data))
+        .catch(() => {
+          if (onlineContent) onlineContent.style.display = "none";
+          if (offlineNotice) offlineNotice.style.display = "block";
+        });
+    }
+  },
+
   startMatch: function(config) {
     App.activeMatch = new DartsMatch(config);
-    const starterName = config.startingPlayer === 1 ? config.player2 : config.player1;
-    let info = `${config.startingScore} ${config.doubleOut ? "Double Out" : "Single Out"} (First to ${config.legsToWin}) • ${starterName} starts`;
-    if (config.bullOffAfterRounds > 0) info += ` • Bull-off R${config.bullOffAfterRounds}`;
-    document.getElementById("match-info-badge").textContent = info;
+    App.updateMatchInfoBadge(App.activeMatch);
     App.resetKeypad();
     App.renderScorer();
     App.showView("scorer");
@@ -68,8 +171,25 @@ window.App = {
     });
     App.navBtns.midStats.addEventListener("click", App.openMidTournamentStats);
 
+    const navConnectPhone = document.getElementById("nav-connect-phone");
+    if (navConnectPhone) navConnectPhone.addEventListener("click", App.openConnectPhoneModal);
+
+    const btnHomeConnect = document.getElementById("btn-home-connect-phone");
+    if (btnHomeConnect) btnHomeConnect.addEventListener("click", App.openConnectPhoneModal);
+
+    const btnCloseConnect = document.getElementById("btn-close-connect-phone");
+    if (btnCloseConnect) {
+      btnCloseConnect.addEventListener("click", () => {
+        const m = document.getElementById("modal-connect-phone");
+        if (m) m.style.display = "none";
+      });
+    }
+
     document.getElementById("btn-start-quick-match").addEventListener("click", () => App.showView("matchSetup"));
-    document.getElementById("btn-start-tourney-setup").addEventListener("click", () => App.showView("tourneySetup"));
+    document.getElementById("btn-start-tourney-setup").addEventListener("click", () => {
+      if (App.activeTournament) App.showView("tourneyDash");
+      else App.showView("tourneySetup");
+    });
     document.getElementById("btn-cancel-match-setup").addEventListener("click", () => App.showView("home"));
     document.getElementById("btn-cancel-tourney-setup").addEventListener("click", () => App.showView("home"));
 
@@ -127,8 +247,11 @@ window.App = {
 
   init: function() {
     const isSpectator = window.location.search.includes("screen=display") || window.location.hash === "#display";
+    const isRemote = window.location.search.includes("screen=remote") || window.location.hash === "#remote";
     if (isSpectator) {
       App.initSpectator();
+    } else if (isRemote) {
+      App.initRemote();
     } else {
       App.sync = new SyncHub(true);
       App.initAppListeners();

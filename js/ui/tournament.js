@@ -4,18 +4,22 @@ window.App = window.App || {};
 App.registeredPlayers = [];
 
 App.renderPlayerTags = function() {
+  const esc = App.escapeHtml || (s => s);
   const container = document.getElementById("tourney-player-tags");
   container.innerHTML = "";
+  const frag = document.createDocumentFragment();
   App.registeredPlayers.forEach(p => {
     const tag = document.createElement("div");
     tag.className = "player-tag";
-    tag.innerHTML = `<span>${p}</span> <span class="remove-tag">&times;</span>`;
+    tag.innerHTML = `<span>${esc(p)}</span> <span class="remove-tag">&times;</span>`;
     tag.querySelector(".remove-tag").addEventListener("click", () => {
       App.registeredPlayers = App.registeredPlayers.filter(name => name !== p);
       App.renderPlayerTags();
+      App.updateRepechageRoundOptions();
     });
-    container.appendChild(tag);
+    frag.appendChild(tag);
   });
+  container.appendChild(frag);
   document.getElementById("tourney-player-count").textContent = App.registeredPlayers.length;
 };
 
@@ -37,13 +41,14 @@ App.loadTournamentFromStorage = function() {
 App.renderTournamentDashboard = function() {
   const tourney = App.activeTournament;
   if (!tourney) return;
+  const esc = App.escapeHtml || (s => s);
   document.getElementById("tourney-dash-title").textContent = tourney.name;
   document.getElementById("tourney-dash-meta").innerHTML = `
     <span class="group-badge" style="color: var(--accent); background: rgba(35, 134, 54, 0.15);">
       ${tourney.format === "groups" ? "Groups + Knockout Tree" : "Direct Knockout Tree"}
     </span>
     <span class="group-badge" style="color: var(--accent-gold); background: rgba(227, 179, 65, 0.15); margin-left: 0.5rem;">
-      STATUS: ${tourney.status.toUpperCase()}
+      STATUS: ${esc(tourney.status.toUpperCase())}
     </span>
   `;
 
@@ -54,6 +59,7 @@ App.renderTournamentDashboard = function() {
   if (tourney.format === "groups") {
     groupsContainer.style.display = "grid";
     groupsContainer.innerHTML = "";
+    const groupsFrag = document.createDocumentFragment();
     const advance = Math.max(1, tourney.advancePerGroup || 2);
 
     tourney.groups.forEach(group => {
@@ -65,7 +71,7 @@ App.renderTournamentDashboard = function() {
 
       let tableHtml = `
         <div class="group-header">
-          <h3 class="group-title">🎯 ${group.name}</h3>
+          <h3 class="group-title">🎯 ${esc(group.name)}</h3>
           <span class="group-badge">${group.players.length} Players • Top ${advance} Advance</span>
         </div>
 
@@ -97,7 +103,7 @@ App.renderTournamentDashboard = function() {
         tableHtml += `
           <tr class="${isQualifying ? 'qualifying-row' : ''}">
             <td style="text-align: center; font-weight: 700;">#${idx + 1}</td>
-            <td><strong>${row.player}</strong></td>
+            <td><strong>${esc(row.player)}</strong></td>
             <td style="text-align: center;">${row.played}</td>
             <td style="text-align: center;">${row.won}</td>
             <td style="text-align: center;">${row.lost}</td>
@@ -125,11 +131,11 @@ App.renderTournamentDashboard = function() {
         tableHtml += `
           <div class="fixture-card ${isDone ? 'finished' : ''}">
             <div class="fixture-matchup">
-              <span class="fixture-player p1 ${wClass1}">${m.player1}</span>
+              <span class="fixture-player p1 ${wClass1}">${esc(m.player1)}</span>
               <span class="fixture-score-badge ${isDone ? 'finished' : ''}">${resText}</span>
-              <span class="fixture-player p2 ${wClass2}">${m.player2}</span>
+              <span class="fixture-player p2 ${wClass2}">${esc(m.player2)}</span>
             </div>
-            <button class="btn ${isDone ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="App.launchTournamentFixture('${m.id}')" style="min-width: 65px;">
+            <button class="btn ${isDone ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="App.launchTournamentFixture('${esc(m.id)}')" style="min-width: 65px;">
               ${isDone ? "Edit" : "Play"}
             </button>
           </div>
@@ -138,8 +144,9 @@ App.renderTournamentDashboard = function() {
 
       tableHtml += `</div></div>`;
       card.innerHTML = tableHtml;
-      groupsContainer.appendChild(card);
+      groupsFrag.appendChild(card);
     });
+    groupsContainer.appendChild(groupsFrag);
 
     if (tourney.status === "groups") {
       advanceBox.style.display = "block";
@@ -188,6 +195,7 @@ App.renderTournamentDashboard = function() {
 };
 
 App.createMatchCardElement = function(m) {
+  const esc = App.escapeHtml || (s => s);
   const card = document.createElement("div");
   card.className = "bracket-match";
   const p1 = m.player1 || "TBD";
@@ -198,16 +206,16 @@ App.createMatchCardElement = function(m) {
 
   card.innerHTML = `
     <div class="bracket-match-p ${m.winner && m.winner === m.player1 ? 'winner' : ''}">
-      <span>${p1}</span>
+      <span>${esc(p1)}</span>
       <strong>${isDone ? m.legsP1 : '-'}</strong>
     </div>
     <div class="bracket-match-p ${m.winner && m.winner === m.player2 ? 'winner' : ''}">
-      <span>${p2}</span>
+      <span>${esc(p2)}</span>
       <strong>${isDone ? m.legsP2 : '-'}</strong>
     </div>
     <div style="display:flex; justify-content:flex-end; margin-top:0.4rem;">
       ${isBye ? '<span style="font-size: 0.75rem; color: var(--accent); padding: 0.2rem 0.5rem; font-weight: 600;">BYE ADVANCE</span>' :
-        `<button class="btn btn-secondary btn-sm" ${!canPlay ? 'disabled' : ''} onclick="App.launchTournamentFixture('${m.id}')">${isDone ? 'Modify / Replay' : 'Play'}</button>`
+        `<button class="btn btn-secondary btn-sm" ${!canPlay ? 'disabled' : ''} onclick="App.launchTournamentFixture('${esc(m.id)}')">${isDone ? 'Modify / Replay' : 'Play'}</button>`
       }
     </div>
   `;
@@ -222,6 +230,7 @@ App.renderBracketTree = function() {
   const tourney = App.activeTournament;
   const totalRounds = tourney.knockoutRounds.length;
   const repEnabled = Boolean(tourney.repechageConfig && tourney.repechageConfig.enabled && tourney.repechageRounds && tourney.repechageRounds.length > 0);
+  const frag = document.createDocumentFragment();
 
   tourney.knockoutRounds.forEach((round, rIdx) => {
     const col = document.createElement("div");
@@ -243,7 +252,7 @@ App.renderBracketTree = function() {
     round.forEach(m => {
       col.appendChild(App.createMatchCardElement(m));
     });
-    container.appendChild(col);
+    frag.appendChild(col);
   });
 
   if (tourney.enableBronzeMatch && tourney.bronzeMatch) {
@@ -251,8 +260,9 @@ App.renderBracketTree = function() {
     col.className = "bracket-column";
     col.innerHTML = `<h4>🥉 3rd Place Playoff</h4>`;
     col.appendChild(App.createMatchCardElement(tourney.bronzeMatch));
-    container.appendChild(col);
+    frag.appendChild(col);
   }
+  container.appendChild(frag);
 };
 
 App.renderRepechageTree = function() {
@@ -263,6 +273,7 @@ App.renderRepechageTree = function() {
   if (!tourney || !tourney.repechageRounds) return;
 
   const totalRepRounds = tourney.repechageRounds.length;
+  const frag = document.createDocumentFragment();
   tourney.repechageRounds.forEach((round, rIdx) => {
     const col = document.createElement("div");
     col.className = "bracket-column";
@@ -273,8 +284,9 @@ App.renderRepechageTree = function() {
     round.forEach(m => {
       col.appendChild(App.createMatchCardElement(m));
     });
-    container.appendChild(col);
+    frag.appendChild(col);
   });
+  container.appendChild(frag);
 };
 
 App.updateRepechageRoundOptions = function() {
@@ -340,6 +352,7 @@ App.downloadCSV = function() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
 
 App.initTournamentUI = function() {

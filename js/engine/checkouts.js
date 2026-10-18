@@ -35,19 +35,37 @@
       3: "1 D1",          2: "D1"
     };
 
+    const IMPOSSIBLE_3DART_SCORES = new Set([163, 166, 169, 172, 173, 175, 176, 178, 179]);
+
+    const SINGLE_OUT_OVERRIDES = {
+      180: "T20 T20 T20", 177: "T20 T20 T19", 174: "T20 T20 T18", 171: "T20 T19 T18",
+      168: "T20 T20 T16", 165: "T20 T19 T16", 162: "T20 T20 T14", 159: "T20 T20 T13",
+      99: "T19 T14"
+    };
+
+    function isValidThreeDartScore(score) {
+      return Number.isInteger(score) && score >= 0 && score <= 180 && !IMPOSSIBLE_3DART_SCORES.has(score);
+    }
+
     function getCheckout(score, doubleOut) {
+      if (!score || score < (doubleOut ? 2 : 1) || score > (doubleOut ? 170 : 180)) return "";
       if (!doubleOut) {
-        if (score <= 20) return `${score}`;
+        if (score <= 20 || score === 25) return `${score}`;
         if (score === 50) return "Bull";
         if (score <= 40 && score % 2 === 0) return `D${score / 2}`;
         if (score <= 60 && score % 3 === 0) return `T${score / 3}`;
+        if (SINGLE_OUT_OVERRIDES[score]) return SINGLE_OUT_OVERRIDES[score];
       }
       return CHECKOUT_TABLE[score] || "";
     }
 
     function isFinishPossible(score, doubleOut) {
-      if (doubleOut) return score <= 170 && !!CHECKOUT_TABLE[score];
-      return score <= 180;
+      if (doubleOut) return score >= 2 && score <= 170 && !!CHECKOUT_TABLE[score];
+      return score >= 1 && score <= 180 && !IMPOSSIBLE_3DART_SCORES.has(score);
     }
 
-    // --- 2. MATCH CLASS ---
+    window.CHECKOUT_TABLE = CHECKOUT_TABLE;
+    window.getCheckout = getCheckout;
+    window.isFinishPossible = isFinishPossible;
+    window.isValidThreeDartScore = isValidThreeDartScore;
+
